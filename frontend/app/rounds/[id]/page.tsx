@@ -1,0 +1,73 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { mockRounds } from "@/lib/mock-data";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
+export default async function RoundDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const round = mockRounds.find((r) => r.id === id);
+  if (!round) notFound();
+
+  return (
+    <div className="mx-auto max-w-3xl px-6 py-20">
+      <div className="flex items-center justify-between">
+        <StatusBadge status={round.status} />
+        <Link
+          href={`/submit?round=${round.id}`}
+          className="rounded-full border border-border px-5 py-2 text-sm text-text-primary transition-colors duration-450 hover:border-accent/40"
+        >
+          Submit a Project
+        </Link>
+      </div>
+
+      <h1 className="mt-6 font-serif text-4xl leading-tight text-text-primary">
+        {round.title}
+      </h1>
+      <p className="mt-4 max-w-2xl text-text-secondary">
+        {round.description}
+      </p>
+
+      <div className="mt-12 rounded-2xl border border-border bg-surface p-7">
+        <h2 className="font-serif text-lg text-text-primary">
+          Evaluation Criteria
+        </h2>
+        <p className="mt-3 font-mono text-sm leading-relaxed text-text-secondary">
+          {round.criteria}
+        </p>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-border bg-surface p-7">
+        <h2 className="font-serif text-lg text-text-primary">
+          Weighted Dimensions
+        </h2>
+        <div className="mt-5 flex flex-col gap-4">
+          {round.dimensions.map((dimension) => (
+            <div key={dimension.id} className="flex items-center gap-4">
+              <span className="w-40 shrink-0 text-sm text-text-primary">
+                {dimension.label}
+              </span>
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${dimension.weight}%` }}
+                />
+              </div>
+              <span className="w-10 text-right font-mono text-xs text-text-secondary">
+                {dimension.weight}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-12 flex items-center justify-between border-t border-border pt-8 text-sm text-text-secondary">
+        <span>{round.submissionCount} submissions so far</span>
+        <span className="font-mono">opened {round.createdAt}</span>
+      </div>
+    </div>
+  );
+}
