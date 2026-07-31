@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Newsreader, Inter, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { PageTransition } from "@/components/motion/PageTransition";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -37,7 +38,9 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-background text-text-primary antialiased">
         <Nav />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </body>
     </html>
   );
