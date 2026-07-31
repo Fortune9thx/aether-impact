@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { CONTRACT_ADDRESS, activeChain } from "@/lib/genlayer";
+
+export const metadata: Metadata = {
+  title: "About | Aether Impact",
+  description:
+    "How Aether Impact's GenLayer Intelligent Contract evaluates retroactive impact funding.",
+};
 
 const steps = [
   {

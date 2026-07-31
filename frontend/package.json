@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "deploy": "node scripts/deploy.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:lifecycle": "node scripts/lifecycle-test.mjs"
   },
   "dependencies": {
     "framer-motion": "^12.43.0",
