@@ -84,7 +84,10 @@ try {
 
   const roundsRaw = await client.readContract({ address, functionName: "list_rounds", args: [] });
   const rounds = JSON.parse(roundsRaw);
-  const round = rounds.find((r) => r.title === "Lifecycle Test Round");
+  // Use the last (most recently appended) round, not a title match -- prior
+  // runs against this same contract can leave old "Lifecycle Test Round"
+  // entries behind, and .find() would silently grab a stale one.
+  const round = rounds[rounds.length - 1];
   record("create_round", !!round, round ? `id=${round.id}` : "round not found after write");
   if (!round) throw new Error("aborting: round not created");
 
@@ -109,7 +112,7 @@ try {
 
   const projectsRaw = await client.readContract({ address, functionName: "list_projects", args: [round.id] });
   const projects = JSON.parse(projectsRaw);
-  const project = projects.find((p) => p.name === "Lifecycle Test Project");
+  const project = projects[projects.length - 1];
   record("submit_project", !!project, project ? `id=${project.id}` : "project not found after write");
   if (!project) throw new Error("aborting: project not created");
 
@@ -140,7 +143,7 @@ try {
   );
   console.log("  reasoning:", evaluation.reasoning);
 
-  log("5/6", "challenge_evaluation (new evidence, real re-evaluation)");
+  log("5/10", "challenge_evaluation (new evidence, real re-evaluation)");
   const newEvidence = JSON.stringify([
     { label: "Additional proof", url: "https://github.com/genlayerlabs" },
   ]);
@@ -152,7 +155,7 @@ try {
   });
   await waitAccepted(challengeHash, "challenge_evaluation");
 
-  log("6/6", "get_evaluation after challenge (verify re-evaluation + challenged flag)");
+  log("6/10", "get_evaluation after challenge (verify re-evaluation + challenged flag)");
   const afterRaw = await client.readContract({ address, functionName: "get_evaluation", args: [project.id] });
   const afterEval = JSON.parse(afterRaw);
   record(
@@ -161,7 +164,24 @@ try {
     `overall_score=${afterEval.overall_score}, challenged=${afterEval.challenged}`,
   );
 
-  log("cleanup", "close_round so this test data doesn't linger as an open round");
+  log("7/10", "fund_round (send 0.01 GEN into the round's pool)");
+  const fundAmount = BigInt(10) ** BigInt(16); // 0.01 GEN in wei
+  const fundHash = await client.writeContract({
+    address,
+    functionName: "fund_round",
+    args: [round.id],
+    value: fundAmount,
+  });
+  await waitAccepted(fundHash, "fund_round");
+  const fundedRoundRaw = await client.readContract({ address, functionName: "get_round", args: [round.id] });
+  const fundedRound = JSON.parse(fundedRoundRaw);
+  record(
+    "fund_round",
+    fundedRound.pool === fundAmount.toString(),
+    `pool=${fundedRound.pool}`,
+  );
+
+  log("8/10", "close_round then compute_distribution");
   const closeHash = await client.writeContract({
     address,
     functionName: "close_round",
@@ -169,8 +189,57 @@ try {
     value: BigInt(0),
   });
   await waitAccepted(closeHash, "close_round");
-  const closedRaw = await client.readContract({ address, functionName: "get_round", args: [round.id] });
-  record("close_round", JSON.parse(closedRaw).status === "closed");
+
+  const distHash = await client.writeContract({
+    address,
+    functionName: "compute_distribution",
+    args: [round.id],
+    value: BigInt(0),
+  });
+  await waitAccepted(distHash, "compute_distribution");
+
+  const payoutsRaw = await client.readContract({ address, functionName: "list_payouts", args: [round.id] });
+  const payouts = JSON.parse(payoutsRaw);
+  const myPayout = payouts.find((p) => p.project_id === project.id);
+  record(
+    "compute_distribution",
+    !!myPayout && BigInt(myPayout.payout) === fundAmount,
+    `payout=${myPayout?.payout} (sole evaluated project should get the full pool)`,
+  );
+
+  log("9/10", "claim_payout (verify real GEN transfer to the submitter)");
+  const balanceBefore = await client.getBalance({ address: account.address });
+  const claimHash = await client.writeContract({
+    address,
+    functionName: "claim_payout",
+    args: [project.id],
+    value: BigInt(0),
+  });
+  await waitAccepted(claimHash, "claim_payout");
+  const balanceAfter = await client.getBalance({ address: account.address });
+
+  const projectAfterClaimRaw = await client.readContract({ address, functionName: "get_project", args: [project.id] });
+  const projectAfterClaim = JSON.parse(projectAfterClaimRaw);
+  record(
+    "claim_payout marks claimed and transfers GEN",
+    projectAfterClaim.claimed === true && balanceAfter > balanceBefore,
+    `claimed=${projectAfterClaim.claimed}, balance before=${balanceBefore}, after=${balanceAfter}`,
+  );
+
+  log("10/10", "claim_payout rejects a second claim");
+  let doubleClaimRejected = false;
+  try {
+    const secondClaimHash = await client.writeContract({
+      address,
+      functionName: "claim_payout",
+      args: [project.id],
+      value: BigInt(0),
+    });
+    await waitAccepted(secondClaimHash, "second claim_payout");
+  } catch {
+    doubleClaimRejected = true;
+  }
+  record("double-claim is rejected", doubleClaimRejected);
 
   console.log("\n=== SUMMARY ===");
   for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"} ${r.name}`);

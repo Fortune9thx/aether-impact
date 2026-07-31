@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
@@ -28,7 +28,8 @@ function SubmitForm() {
     useContractRead<Round[]>("list_rounds", []);
   const openRounds = (rounds ?? []).filter((r) => r.status === "open");
 
-  const [roundId, setRoundId] = useState(searchParams.get("round") ?? "");
+  const [selectedRoundId, setSelectedRoundId] = useState(searchParams.get("round") ?? "");
+  const roundId = selectedRoundId || openRounds[0]?.id || "";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [claimedImpact, setClaimedImpact] = useState("");
@@ -37,13 +38,6 @@ function SubmitForm() {
   ]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!roundId && openRounds.length > 0) {
-      setRoundId(openRounds[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openRounds.length]);
 
   function updateEvidence(index: number, item: DraftEvidenceLink) {
     setEvidence((prev) => prev.map((e, i) => (i === index ? item : e)));
@@ -137,7 +131,7 @@ function SubmitForm() {
             <select
               required
               value={roundId}
-              onChange={(e) => setRoundId(e.target.value)}
+              onChange={(e) => setSelectedRoundId(e.target.value)}
               className="rounded-xl border border-border bg-surface px-4 py-3 text-text-primary focus:border-accent/40 focus:outline-none"
             >
               {openRounds.map((round) => (

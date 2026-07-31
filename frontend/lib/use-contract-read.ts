@@ -38,7 +38,9 @@ export function useContractRead<T>(
         error: err instanceof Error ? err.message : "Failed to read from contract",
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deliberately generic: callers pass their own dep array (roundId,
+    // projectId, etc). A literal array here would defeat the point of the hook.
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, deps);
 
   useEffect(() => {

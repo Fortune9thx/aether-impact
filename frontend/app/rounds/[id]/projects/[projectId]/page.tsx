@@ -12,6 +12,7 @@ import { DimensionScoreRow } from "@/components/evaluation/DimensionScoreRow";
 import { CitedEvidenceList } from "@/components/evaluation/CitedEvidenceList";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 import { WalletButton } from "@/components/ui/WalletButton";
+import { formatGen } from "@/lib/format";
 
 export default function EvaluationPage({
   params,
@@ -23,8 +24,10 @@ export default function EvaluationPage({
 
   const { data: round, loading: roundLoading, error: roundError } =
     useContractRead<Round>("get_round", [id], [id]);
-  const { data: project, loading: projectLoading, error: projectError } =
+  const { data: project, loading: projectLoading, error: projectError, refetch: refetchProject } =
     useContractRead<Project>("get_project", [projectId], [projectId]);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [evaluationLoading, setEvaluationLoading] = useState(true);
@@ -55,6 +58,9 @@ export default function EvaluationPage({
   }, [projectId]);
 
   useEffect(() => {
+    // Intentional fetch-on-mount/dependency-change; fetchEvaluation sets its
+    // own loading/error state, it isn't deriving state from props.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchEvaluation();
   }, [fetchEvaluation]);
 
@@ -200,17 +206,76 @@ export default function EvaluationPage({
             </div>
           </div>
 
+          {round.distributed && Number(project.payout) > 0 && (
+            <div className="mt-14 flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-7">
+              <div>
+                <h2 className="font-serif text-lg text-text-primary">
+                  Payout
+                </h2>
+                <p className="mt-1 font-mono text-sm text-accent">
+                  {formatGen(project.payout)} GEN
+                </p>
+              </div>
+
+              {project.claimed ? (
+                <span className="text-sm text-text-secondary">Claimed</span>
+              ) : address?.toLowerCase() === project.submitter.toLowerCase() ? (
+                <button
+                  onClick={async () => {
+                    setClaimError(null);
+                    if (!address) return;
+                    setClaiming(true);
+                    try {
+                      await writeContract(address, window.ethereum, "claim_payout", [
+                        project.id,
+                      ]);
+                      await refetchProject();
+                    } catch (err) {
+                      setClaimError(
+                        err instanceof Error ? err.message : "Failed to claim payout",
+                      );
+                    } finally {
+                      setClaiming(false);
+                    }
+                  }}
+                  disabled={claiming}
+                  className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {claiming ? "Claiming..." : "Claim Payout"}
+                </button>
+              ) : (
+                <span className="text-sm text-text-secondary">
+                  Only the submitter can claim
+                </span>
+              )}
+            </div>
+          )}
+          {claimError && (
+            <div className="mt-4">
+              <ErrorState message={claimError} />
+            </div>
+          )}
+
           <div className="mt-16 flex items-center justify-between border-t border-border pt-8">
-            <p className="max-w-sm text-sm text-text-secondary">
-              Disagree with this evaluation? Submit a challenge with new
-              supporting evidence.
-            </p>
-            <Link
-              href={`/rounds/${round.id}/projects/${project.id}/challenge`}
-              className="shrink-0 rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-danger/40"
-            >
-              Challenge Evaluation
-            </Link>
+            {round.distributed ? (
+              <p className="text-sm text-text-secondary">
+                This round has distributed funds; evaluations can no longer be
+                challenged.
+              </p>
+            ) : (
+              <>
+                <p className="max-w-sm text-sm text-text-secondary">
+                  Disagree with this evaluation? Submit a challenge with new
+                  supporting evidence.
+                </p>
+                <Link
+                  href={`/rounds/${round.id}/projects/${project.id}/challenge`}
+                  className="shrink-0 rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-danger/40"
+                >
+                  Challenge Evaluation
+                </Link>
+              </>
+            )}
           </div>
         </>
       )}

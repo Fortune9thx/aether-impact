@@ -3,11 +3,12 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { Evaluation, Project, Round } from "@/lib/types";
+import { Evaluation, Payout, Project, Round } from "@/lib/types";
 import { isContractConfigured, readContract, writeContract } from "@/lib/genlayer";
 import { useContractRead } from "@/lib/use-contract-read";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { RankingRow } from "@/components/round/RankingRow";
+import { ClaimPayoutRow } from "@/components/round/ClaimPayoutRow";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 
 export default function RankingsPage({
@@ -22,6 +23,8 @@ export default function RankingsPage({
     useContractRead<Round>("get_round", [id], [id]);
   const { data: projects, loading: projectsLoading, error: projectsError } =
     useContractRead<Project[]>("list_projects", [id], [id]);
+  const { data: payouts, refetch: refetchPayouts } =
+    useContractRead<Payout[]>("list_payouts", [id], [id]);
 
   const [evaluations, setEvaluations] = useState<Record<string, Evaluation>>({});
   const [evaluationsLoading, setEvaluationsLoading] = useState(true);
@@ -53,6 +56,9 @@ export default function RankingsPage({
   }, [projects]);
 
   useEffect(() => {
+    // Intentional fetch-on-mount/dependency-change; fetchEvaluations sets its
+    // own loading state, it isn't deriving state from props.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchEvaluations();
   }, [fetchEvaluations]);
 
@@ -135,6 +141,30 @@ export default function RankingsPage({
               index={index}
             />
           ))}
+        </div>
+      )}
+
+      {round.distributed && payouts && payouts.length > 0 && (
+        <div className="mt-12">
+          <h2 className="font-serif text-xl text-text-primary">
+            Distribution
+          </h2>
+          <p className="mt-2 text-sm text-text-secondary">
+            The funding pool has been distributed proportionally by final
+            score. Submitters can claim their share below.
+          </p>
+          <div className="mt-4 flex flex-col gap-3">
+            {payouts
+              .filter((p) => Number(p.payout) > 0)
+              .sort((a, b) => Number(b.payout) - Number(a.payout))
+              .map((payout) => (
+                <ClaimPayoutRow
+                  key={payout.project_id}
+                  payout={payout}
+                  onClaimed={refetchPayouts}
+                />
+              ))}
+          </div>
         </div>
       )}
 

@@ -6,6 +6,8 @@ import { Project, Round } from "@/lib/types";
 import { useContractRead } from "@/lib/use-contract-read";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
+import { FundRoundPanel } from "@/components/round/FundRoundPanel";
+import { RoundAdminPanel } from "@/components/round/RoundAdminPanel";
 
 export default function RoundDetailPage({
   params,
@@ -14,7 +16,7 @@ export default function RoundDetailPage({
 }) {
   const { id } = use(params);
 
-  const { data: round, loading: roundLoading, error: roundError } =
+  const { data: round, loading: roundLoading, error: roundError, refetch: refetchRound } =
     useContractRead<Round>("get_round", [id], [id]);
   const { data: projects, loading: projectsLoading } = useContractRead<
     Project[]
@@ -81,6 +83,14 @@ export default function RoundDetailPage({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <FundRoundPanel round={round} onFunded={refetchRound} />
+      </div>
+
+      <div className="mt-6">
+        <RoundAdminPanel round={round} onChanged={refetchRound} />
       </div>
 
       <div className="mt-12 flex items-center justify-between border-t border-border pt-8 text-sm text-text-secondary">

@@ -33,7 +33,6 @@ type WalletContextValue = {
   address: `0x${string}` | null;
   connecting: boolean;
   error: string | null;
-  isMetaMaskAvailable: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
 };
@@ -44,11 +43,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<`0x${string}` | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isMetaMaskAvailable, setIsMetaMaskAvailable] = useState(false);
-
-  useEffect(() => {
-    setIsMetaMaskAvailable(typeof window !== "undefined" && !!window.ethereum);
-  }, []);
 
   useEffect(() => {
     if (!window.ethereum?.on) return;
@@ -110,8 +104,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ address, connecting, error, isMetaMaskAvailable, connect, disconnect }),
-    [address, connecting, error, isMetaMaskAvailable, connect, disconnect],
+    () => ({ address, connecting, error, connect, disconnect }),
+    [address, connecting, error, connect, disconnect],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

@@ -81,7 +81,6 @@ const hash = await client.writeContract({
 });
 console.log("   tx hash:", hash);
 
-let roundId = null;
 for (let attempt = 0; attempt < 40; attempt++) {
   await new Promise((r) => setTimeout(r, 3000));
   const tx = await client.getTransaction({ hash });

@@ -17,6 +17,8 @@ export type Round = {
   dimensions: Dimension[];
   status: RoundStatus;
   created_at: string;
+  pool: string; // wei, as a string (contract stores u256-scale amounts as str)
+  distributed: boolean;
 };
 
 export type EvidenceLink = {
@@ -32,6 +34,17 @@ export type Project = {
   claimed_impact: string;
   evidence: EvidenceLink[];
   submitted_at: string;
+  submitter: string;
+  payout: string; // wei, as a string
+  claimed: boolean;
+};
+
+export type Payout = {
+  project_id: string;
+  name: string;
+  submitter: string;
+  payout: string;
+  claimed: boolean;
 };
 
 export type DimensionScore = {

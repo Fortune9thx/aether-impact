@@ -219,6 +219,8 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
             "dimensions": parsed_dimensions,
             "status": "open",
             "created_at": str(gl.message_raw["datetime"]),
+            "pool": "0",
+            "distributed": False,
         }
         self.rounds[round_id] = json.dumps(record)
         self.round_owners[round_id] = str(gl.message.sender_address)
@@ -284,6 +286,9 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
             "claimed_impact": claimed_impact,
             "evidence": parsed_evidence,
             "submitted_at": str(gl.message_raw["datetime"]),
+            "submitter": str(gl.message.sender_address),
+            "payout": "0",
+            "claimed": False,
         }
         self.projects[project_id] = json.dumps(record)
 
@@ -340,6 +345,12 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
     def challenge_evaluation(self, project_id: str, new_evidence: str) -> str:
         project = self._get_project(project_id)
 
+        round_record = self._get_round(project["round_id"])
+        if round_record.get("distributed"):
+            raise ValueError(
+                "this round has already distributed funds; evaluations can no longer be challenged"
+            )
+
         evaluation_id = f"eval-{project_id}"
         if self.evaluations.get(evaluation_id) is None:
             raise ValueError(f"no evaluation found for project: {project_id}")
@@ -349,8 +360,6 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
 
         project["evidence"] = project["evidence"] + additional
         self.projects[project_id] = json.dumps(project)
-
-        round_record = self._get_round(project["round_id"])
 
         parsed = self._run_evaluation(
             project,
@@ -362,3 +371,116 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
         )
 
         return evaluation_id
+
+    # ---- funding & distribution ----
+
+    @gl.public.write.payable
+    def fund_round(self, round_id: str) -> str:
+        record = self._get_round(round_id)
+        if record.get("distributed"):
+            raise ValueError("round has already distributed its funds; cannot add more")
+
+        amount = gl.message.value
+        record["pool"] = str(int(record["pool"]) + int(amount))
+        self.rounds[round_id] = json.dumps(record)
+
+        return record["pool"]
+
+    @gl.public.write
+    def compute_distribution(self, round_id: str) -> str:
+        record = self._get_round(round_id)
+
+        owner = self.round_owners.get(round_id)
+        if owner is not None and owner != str(gl.message.sender_address):
+            raise ValueError("only the round creator can compute the distribution")
+
+        if record["status"] != "closed":
+            raise ValueError("round must be closed before computing distribution")
+        if record.get("distributed"):
+            raise ValueError("distribution has already been computed for this round")
+
+        pool = int(record["pool"])
+        if pool <= 0:
+            raise ValueError("round has no funds to distribute; call fund_round first")
+
+        ids = self._load_ids(self.project_ids, round_id)
+        evaluated = []
+        for pid in ids:
+            eval_raw = self.evaluations.get(f"eval-{pid}")
+            if eval_raw is None:
+                continue
+            evaluated.append((pid, json.loads(eval_raw)["overall_score"]))
+
+        if len(evaluated) == 0:
+            raise ValueError("no evaluated projects in this round; nothing to distribute to")
+
+        total_score = sum(score for _, score in evaluated)
+        if total_score <= 0:
+            raise ValueError("all evaluated projects scored zero; nothing to distribute")
+
+        payouts = []
+        for pid, score in evaluated:
+            payout = (pool * score) // total_score
+            project = self._get_project(pid)
+            project["payout"] = str(payout)
+            project["claimed"] = False
+            self.projects[pid] = json.dumps(project)
+            payouts.append({"project_id": pid, "payout": payout})
+
+        record["distributed"] = True
+        self.rounds[round_id] = json.dumps(record)
+
+        return json.dumps(payouts)
+
+    @gl.public.write
+    def claim_payout(self, project_id: str) -> str:
+        project = self._get_project(project_id)
+
+        round_record = self._get_round(project["round_id"])
+        if not round_record.get("distributed"):
+            raise ValueError("this round has not distributed funds yet")
+
+        if project.get("claimed"):
+            raise ValueError("payout already claimed")
+
+        if str(gl.message.sender_address) != project.get("submitter"):
+            raise ValueError("only the project's original submitter can claim its payout")
+
+        amount = int(project.get("payout", "0"))
+        if amount <= 0:
+            raise ValueError("nothing to claim for this project")
+
+        # Mark claimed before sending funds (checks-effects-interactions).
+        project["claimed"] = True
+        self.projects[project_id] = json.dumps(project)
+
+        _Recipient(Address(project["submitter"])).emit_transfer(value=amount)
+
+        return str(amount)
+
+    @gl.public.view
+    def list_payouts(self, round_id: str) -> str:
+        self._get_round(round_id)  # raises if round_id is invalid
+        ids = self._load_ids(self.project_ids, round_id)
+        results = []
+        for pid in ids:
+            project = self._get_project(pid)
+            results.append(
+                {
+                    "project_id": pid,
+                    "name": project["name"],
+                    "submitter": project.get("submitter", ""),
+                    "payout": project.get("payout", "0"),
+                    "claimed": project.get("claimed", False),
+                }
+            )
+        return json.dumps(results)
+
+
+@gl.evm.contract_interface
+class _Recipient:
+    class View:
+        pass
+
+    class Write:
+        pass

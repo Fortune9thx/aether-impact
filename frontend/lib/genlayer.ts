@@ -92,6 +92,7 @@ export async function writeContract(
   provider: unknown,
   functionName: string,
   args: unknown[] = [],
+  value: bigint = BigInt(0),
 ): Promise<string> {
   const address = requireContractAddress();
   const client = createClient({
@@ -105,7 +106,7 @@ export async function writeContract(
       address,
       functionName,
       args: args as never,
-      value: BigInt(0),
+      value,
     });
 
     const receipt = await client.waitForTransactionReceipt({
