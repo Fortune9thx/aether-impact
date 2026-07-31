@@ -64,14 +64,15 @@ export function FundRoundPanel({
 
       {round.distributed ? (
         <p className="mt-3 text-sm text-text-secondary">
-          This round has already distributed its funds.
+          This round has already computed its distribution.
         </p>
       ) : (
         <>
           <p className="mt-3 text-sm text-text-secondary">
             Anyone can add GEN to this round&apos;s pool. Once the round is
-            closed, it distributes proportionally across evaluated projects
-            by final score.
+            closed, distribution splits it proportionally across evaluated
+            projects by final score. Fund settlement is currently handled
+            off-chain.
           </p>
 
           <div className="mt-5 flex items-center gap-3">

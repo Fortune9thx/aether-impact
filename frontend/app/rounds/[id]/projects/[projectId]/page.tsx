@@ -215,10 +215,14 @@ export default function EvaluationPage({
                 <p className="mt-1 font-mono text-sm text-accent">
                   {formatGen(project.payout)} GEN
                 </p>
+                <p className="mt-1 text-xs text-text-secondary">
+                  Recording a claim confirms your entitlement on-chain; fund
+                  settlement is currently handled off-chain.
+                </p>
               </div>
 
               {project.claimed ? (
-                <span className="text-sm text-text-secondary">Claimed</span>
+                <span className="text-sm text-text-secondary">Claim recorded</span>
               ) : address?.toLowerCase() === project.submitter.toLowerCase() ? (
                 <button
                   onClick={async () => {
@@ -241,7 +245,7 @@ export default function EvaluationPage({
                   disabled={claiming}
                   className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
                 >
-                  {claiming ? "Claiming..." : "Claim Payout"}
+                  {claiming ? "Recording..." : "Record Claim"}
                 </button>
               ) : (
                 <span className="text-sm text-text-secondary">

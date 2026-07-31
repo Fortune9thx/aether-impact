@@ -5,7 +5,7 @@ A GenLayer-powered retroactive impact funding evaluation engine. DAOs, foundatio
 ## Live
 
 - **Frontend:** https://aether-impact.vercel.app
-- **Contract:** `ImpactEvaluator.py` on GenLayer Bradbury testnet at `0x39B6c36264213f26b9ae43f2E93Db84b7Aa58e3C`
+- **Contract:** `ImpactEvaluator.py` on GenLayer Bradbury testnet at `0x98A161e781A01ace184A472101AB6583AA3bc02f`
 
 ## Project Overview
 
@@ -70,5 +70,7 @@ See `docs/DEPLOYMENT.md` for the current live address and network.
 
 ## MVP Scope
 
-In scope: round creation, project submission, AI evaluation, challenges, rankings, a public shareable evaluation view.
-Out of scope: token distribution, complex governance, multi-chain bridging.
+In scope: round creation (with a creator/admins permission model), project submission, AI evaluation, challenges, proportional token distribution, rankings, a public shareable evaluation view.
+Out of scope: complex governance beyond round admins, multi-chain bridging.
+
+**Known limitation:** `claim_payout` records a submitter's entitlement on-chain (`payout` amount + `claimed` flag) but does not itself transfer GEN — the documented `gl.evm.contract_interface` pattern for a contract paying out to a plain wallet address was tested and confirmed non-functional on this GenVM build. See `docs/ARCHITECTURE.md` for details. Fund settlement is currently handled off-chain until the correct primitive is confirmed.

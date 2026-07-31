@@ -62,15 +62,16 @@ export function ClaimPayoutRow({
         {payout.claimed ? (
           <span className="flex items-center gap-1.5 text-xs text-text-secondary">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Claimed
+            Claim recorded
           </span>
         ) : isSubmitter ? (
           <button
             onClick={handleClaim}
             disabled={claiming}
+            title="Records your entitlement on-chain. Fund settlement is currently handled off-chain."
             className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
           >
-            {claiming ? "Claiming..." : "Claim"}
+            {claiming ? "Recording..." : "Record Claim"}
           </button>
         ) : !address ? (
           <button

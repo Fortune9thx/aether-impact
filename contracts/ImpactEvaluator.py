@@ -464,8 +464,16 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
 
         return json.dumps(payouts)
 
-    @gl.public.write.payable
+    @gl.public.write
     def claim_payout(self, project_id: str) -> str:
+        # NOTE: this records the submitter's entitlement on-chain (payout
+        # amount + claimed flag) but does not itself move GEN. Automatic
+        # contract-to-EOA transfer via gl.evm.contract_interface was tested
+        # and confirmed non-functional on this GenVM build (contract balance
+        # did not decrease after the "transfer" call). Settlement of claimed
+        # payouts currently happens off-chain/manually until the correct
+        # native-transfer primitive is confirmed. Do not re-add a transfer
+        # call here without first verifying it actually moves funds.
         project = self._get_project(project_id)
         self._require_project_owner(project)
 
@@ -480,11 +488,8 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
         if amount <= 0:
             raise ValueError("nothing to claim for this project")
 
-        # Mark claimed before sending funds (checks-effects-interactions).
         project["claimed"] = True
         self.projects[project_id] = json.dumps(project)
-
-        _Recipient(Address(project["submitter"])).emit_transfer(value=amount)
 
         return str(amount)
 
@@ -505,12 +510,3 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
                 }
             )
         return json.dumps(results)
-
-
-@gl.evm.contract_interface
-class _Recipient:
-    class View:
-        pass
-
-    class Write:
-        pass

@@ -150,8 +150,9 @@ export default function RankingsPage({
             Distribution
           </h2>
           <p className="mt-2 text-sm text-text-secondary">
-            The funding pool has been distributed proportionally by final
-            score. Submitters can claim their share below.
+            The funding pool has been split proportionally by final score.
+            Submitters can record their claim below; fund settlement is
+            currently handled off-chain.
           </p>
           <div className="mt-4 flex flex-col gap-3">
             {payouts

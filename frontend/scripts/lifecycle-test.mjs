@@ -70,6 +70,20 @@ async function readListWithRetry(functionName, args, label) {
   throw new Error(`${label} stayed empty after retries`);
 }
 
+// Same read-after-write lag, but for a single object where we're waiting on
+// a specific field to reflect the write (e.g. challenged flipping to true).
+async function readUntil(functionName, args, predicate, label) {
+  let last;
+  for (let i = 0; i < 10; i++) {
+    const raw = await client.readContract({ address, functionName, args });
+    last = JSON.parse(raw);
+    if (predicate(last)) return last;
+    console.log(`  ${label}: not yet reflected, retrying (${i + 1}/10)...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return last;
+}
+
 const results = [];
 function record(name, pass, detail) {
   results.push({ name, pass, detail });
@@ -167,8 +181,12 @@ try {
   await waitAccepted(challengeHash, "challenge_evaluation");
 
   log("6/10", "get_evaluation after challenge (verify re-evaluation + challenged flag)");
-  const afterRaw = await client.readContract({ address, functionName: "get_evaluation", args: [project.id] });
-  const afterEval = JSON.parse(afterRaw);
+  const afterEval = await readUntil(
+    "get_evaluation",
+    [project.id],
+    (e) => e.challenged === true,
+    "get_evaluation (challenged flag)",
+  );
   record(
     "challenge_evaluation re-evaluates and marks challenged",
     afterEval.challenged === true && typeof afterEval.overall_score === "number",
@@ -184,8 +202,12 @@ try {
     value: fundAmount,
   });
   await waitAccepted(fundHash, "fund_round");
-  const fundedRoundRaw = await client.readContract({ address, functionName: "get_round", args: [round.id] });
-  const fundedRound = JSON.parse(fundedRoundRaw);
+  const fundedRound = await readUntil(
+    "get_round",
+    [round.id],
+    (r) => r.pool === fundAmount.toString(),
+    "get_round (pool)",
+  );
   record(
     "fund_round",
     fundedRound.pool === fundAmount.toString(),
@@ -218,8 +240,11 @@ try {
     `payout=${myPayout?.payout} (sole evaluated project should get the full pool)`,
   );
 
-  log("9/10", "claim_payout (verify real GEN transfer to the submitter)");
-  const balanceBefore = await client.getBalance({ address: account.address });
+  log(
+    "9/10",
+    "claim_payout (records entitlement on-chain -- does NOT transfer GEN; " +
+      "see docs/ARCHITECTURE.md 'Known limitation')",
+  );
   const claimHash = await client.writeContract({
     address,
     functionName: "claim_payout",
@@ -227,14 +252,17 @@ try {
     value: BigInt(0),
   });
   await waitAccepted(claimHash, "claim_payout");
-  const balanceAfter = await client.getBalance({ address: account.address });
 
-  const projectAfterClaimRaw = await client.readContract({ address, functionName: "get_project", args: [project.id] });
-  const projectAfterClaim = JSON.parse(projectAfterClaimRaw);
+  const projectAfterClaim = await readUntil(
+    "get_project",
+    [project.id],
+    (p) => p.claimed === true,
+    "get_project (claimed)",
+  );
   record(
-    "claim_payout marks claimed and transfers GEN",
-    projectAfterClaim.claimed === true && balanceAfter > balanceBefore,
-    `claimed=${projectAfterClaim.claimed}, balance before=${balanceBefore}, after=${balanceAfter}`,
+    "claim_payout marks claimed",
+    projectAfterClaim.claimed === true,
+    `claimed=${projectAfterClaim.claimed}`,
   );
 
   log("10/10", "claim_payout rejects a second claim");
