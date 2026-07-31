@@ -67,6 +67,31 @@ export const mockProjects: Project[] = [
       { id: "e3", label: "Dependent repos", url: "https://github.com/example/cartographer-sdk/network/dependents" },
     ],
   },
+  {
+    id: "p2",
+    roundId: "r1",
+    name: "Ledger Notary",
+    description:
+      "A lightweight attestation service that timestamps and signs off-chain documents against GenLayer state.",
+    claimedImpact:
+      "Used by three grant programs to notarize disbursement records, reducing audit time by roughly half.",
+    evidence: [
+      { id: "e4", label: "GitHub repo", url: "https://github.com/example/ledger-notary" },
+      { id: "e5", label: "Integration case study", url: "https://example.com/case-studies/ledger-notary" },
+    ],
+  },
+  {
+    id: "p3",
+    roundId: "r1",
+    name: "Signal Relay",
+    description:
+      "An event-relay service that forwards GenLayer contract events to Discord and Slack for community visibility.",
+    claimedImpact:
+      "Deployed in 15 community servers, driving higher engagement around governance votes.",
+    evidence: [
+      { id: "e6", label: "GitHub repo", url: "https://github.com/example/signal-relay" },
+    ],
+  },
 ];
 
 export const mockEvaluations: Evaluation[] = [
@@ -112,6 +137,83 @@ export const mockEvaluations: Evaluation[] = [
       "https://www.npmjs.com/package/cartographer-sdk",
       "https://github.com/example/cartographer-sdk/network/dependents",
     ],
+    challenged: false,
+  },
+  {
+    id: "eval-p2",
+    projectId: "p2",
+    overallScore: 71,
+    confidence: 65,
+    dimensionScores: [
+      {
+        dimensionId: "d1",
+        label: "Verifiable Impact",
+        score: 68,
+        reasoning:
+          "The case study supports adoption by grant programs but does not quantify the audit-time reduction independently.",
+      },
+      {
+        dimensionId: "d2",
+        label: "Technical Quality",
+        score: 74,
+        reasoning: "Clean, well-tested codebase with a narrow, well-scoped feature set.",
+      },
+      {
+        dimensionId: "d3",
+        label: "Ecosystem Value",
+        score: 70,
+        reasoning: "Useful but addresses a narrower need than broader developer tooling.",
+      },
+      {
+        dimensionId: "d4",
+        label: "Sustainability",
+        score: 72,
+        reasoning: "Small but active maintenance cadence over the past quarter.",
+      },
+    ],
+    reasoning:
+      "Ledger Notary shows credible, if modest, adoption within grant tooling. Evidence supports the claim directionally but lacks independent quantification of the audit-time savings, which tempers confidence relative to more thoroughly documented submissions.",
+    citedEvidence: [
+      "https://github.com/example/ledger-notary",
+      "https://example.com/case-studies/ledger-notary",
+    ],
+    challenged: false,
+  },
+  {
+    id: "eval-p3",
+    projectId: "p3",
+    overallScore: 52,
+    confidence: 58,
+    dimensionScores: [
+      {
+        dimensionId: "d1",
+        label: "Verifiable Impact",
+        score: 45,
+        reasoning:
+          "No independent evidence of the claimed 15-server deployment beyond the repository itself.",
+      },
+      {
+        dimensionId: "d2",
+        label: "Technical Quality",
+        score: 60,
+        reasoning: "Functional but minimal test coverage and sparse documentation.",
+      },
+      {
+        dimensionId: "d3",
+        label: "Ecosystem Value",
+        score: 55,
+        reasoning: "Solves a real but narrow visibility problem for community operators.",
+      },
+      {
+        dimensionId: "d4",
+        label: "Sustainability",
+        score: 48,
+        reasoning: "Single commit burst with no maintenance activity since.",
+      },
+    ],
+    reasoning:
+      "Signal Relay's core claim is plausible but unsubstantiated beyond the submission's own description. Without independent evidence of the stated deployment footprint, the score reflects code quality and concept value rather than verified impact.",
+    citedEvidence: ["https://github.com/example/signal-relay"],
     challenged: false,
   },
 ];

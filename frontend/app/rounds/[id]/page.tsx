@@ -68,6 +68,13 @@ export default async function RoundDetailPage({
         <span>{round.submissionCount} submissions so far</span>
         <span className="font-mono">opened {round.createdAt}</span>
       </div>
+
+      <Link
+        href={`/rounds/${round.id}/rankings`}
+        className="mt-6 flex w-fit items-center gap-2 rounded-full border border-border bg-surface px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-accent/40"
+      >
+        View Rankings
+      </Link>
     </div>
   );
 }
