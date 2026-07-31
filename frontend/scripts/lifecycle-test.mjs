@@ -57,6 +57,19 @@ async function waitAccepted(hash, label) {
   throw new Error(`${label} timed out waiting for acceptance`);
 }
 
+// Bradbury reads can lag briefly behind an accepted write -- retry until the
+// expected array is non-empty rather than trusting the first read.
+async function readListWithRetry(functionName, args, label) {
+  for (let i = 0; i < 10; i++) {
+    const raw = await client.readContract({ address, functionName, args });
+    const parsed = JSON.parse(raw);
+    if (parsed.length > 0) return parsed;
+    console.log(`  ${label}: empty, retrying (${i + 1}/10)...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`${label} stayed empty after retries`);
+}
+
 const results = [];
 function record(name, pass, detail) {
   results.push({ name, pass, detail });
@@ -82,11 +95,10 @@ try {
   });
   await waitAccepted(createHash, "create_round");
 
-  const roundsRaw = await client.readContract({ address, functionName: "list_rounds", args: [] });
-  const rounds = JSON.parse(roundsRaw);
   // Use the last (most recently appended) round, not a title match -- prior
   // runs against this same contract can leave old "Lifecycle Test Round"
   // entries behind, and .find() would silently grab a stale one.
+  const rounds = await readListWithRetry("list_rounds", [], "list_rounds");
   const round = rounds[rounds.length - 1];
   record("create_round", !!round, round ? `id=${round.id}` : "round not found after write");
   if (!round) throw new Error("aborting: round not created");
@@ -110,8 +122,7 @@ try {
   });
   await waitAccepted(submitHash, "submit_project");
 
-  const projectsRaw = await client.readContract({ address, functionName: "list_projects", args: [round.id] });
-  const projects = JSON.parse(projectsRaw);
+  const projects = await readListWithRetry("list_projects", [round.id], "list_projects");
   const project = projects[projects.length - 1];
   record("submit_project", !!project, project ? `id=${project.id}` : "project not found after write");
   if (!project) throw new Error("aborting: project not created");

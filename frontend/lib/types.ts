@@ -19,7 +19,18 @@ export type Round = {
   created_at: string;
   pool: string; // wei, as a string (contract stores u256-scale amounts as str)
   distributed: boolean;
+  creator: string;
+  admins: string[];
 };
+
+export function isRoundAdmin(round: Round, address: string | null): boolean {
+  if (!address) return false;
+  const lower = address.toLowerCase();
+  return (
+    round.creator?.toLowerCase() === lower ||
+    round.admins?.some((a) => a.toLowerCase() === lower)
+  );
+}
 
 export type EvidenceLink = {
   label: string;
@@ -38,6 +49,11 @@ export type Project = {
   payout: string; // wei, as a string
   claimed: boolean;
 };
+
+export function isProjectOwner(project: Project, address: string | null): boolean {
+  if (!address) return false;
+  return project.submitter?.toLowerCase() === address.toLowerCase();
+}
 
 export type Payout = {
   project_id: string;

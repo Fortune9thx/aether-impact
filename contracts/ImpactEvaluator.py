@@ -12,7 +12,6 @@ class ImpactEvaluator(gl.Contract):
     # typed TreeMap values (dataclass, u256, bool) deploy but become
     # permanently unreadable post-accept.
     rounds: TreeMap[str, str]
-    round_owners: TreeMap[str, str]   # round_id -> creator address (str)
     projects: TreeMap[str, str]
     evaluations: TreeMap[str, str]
     round_ids: TreeMap[str, str]      # single key "all" -> json list[str]
@@ -52,6 +51,21 @@ class ImpactEvaluator(gl.Contract):
         if raw is None:
             raise ValueError(f"project not found: {project_id}")
         return json.loads(raw)
+
+    def _is_round_admin(self, round_record: dict, address: str) -> bool:
+        return address == round_record.get("creator") or address in round_record.get(
+            "admins", []
+        )
+
+    def _require_round_admin(self, round_record: dict) -> None:
+        sender = str(gl.message.sender_address)
+        if not self._is_round_admin(round_record, sender):
+            raise ValueError("only a round admin can perform this action")
+
+    def _require_project_owner(self, project: dict) -> None:
+        sender = str(gl.message.sender_address)
+        if project.get("submitter") != sender:
+            raise ValueError("only the project's submitter can perform this action")
 
     def _require_non_empty(self, value: str, field_name: str) -> str:
         stripped = value.strip()
@@ -211,6 +225,7 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
         self._validate_dimensions(parsed_dimensions)
 
         round_id = self._next_id("round")
+        creator = str(gl.message.sender_address)
         record = {
             "id": round_id,
             "title": title,
@@ -221,9 +236,10 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
             "created_at": str(gl.message_raw["datetime"]),
             "pool": "0",
             "distributed": False,
+            "creator": creator,
+            "admins": [creator],
         }
         self.rounds[round_id] = json.dumps(record)
-        self.round_owners[round_id] = str(gl.message.sender_address)
 
         ids = self._load_ids(self.round_ids, "all")
         ids.append(round_id)
@@ -235,15 +251,34 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
     @gl.public.write
     def close_round(self, round_id: str) -> None:
         record = self._get_round(round_id)
-
-        owner = self.round_owners.get(round_id)
-        if owner is not None and owner != str(gl.message.sender_address):
-            raise ValueError("only the round creator can close this round")
+        self._require_round_admin(record)
 
         if record["status"] == "closed":
             raise ValueError("round is already closed")
 
         record["status"] = "closed"
+        self.rounds[round_id] = json.dumps(record)
+
+    @gl.public.write
+    def add_admin(self, round_id: str, new_admin: str) -> None:
+        record = self._get_round(round_id)
+        self._require_round_admin(record)
+
+        admins = record.get("admins", [])
+        if new_admin not in admins:
+            admins.append(new_admin)
+        record["admins"] = admins
+        self.rounds[round_id] = json.dumps(record)
+
+    @gl.public.write
+    def remove_admin(self, round_id: str, admin: str) -> None:
+        record = self._get_round(round_id)
+        self._require_round_admin(record)
+
+        if admin == record.get("creator"):
+            raise ValueError("cannot remove the round creator as admin")
+
+        record["admins"] = [a for a in record.get("admins", []) if a != admin]
         self.rounds[round_id] = json.dumps(record)
 
     @gl.public.view
@@ -389,10 +424,7 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
     @gl.public.write
     def compute_distribution(self, round_id: str) -> str:
         record = self._get_round(round_id)
-
-        owner = self.round_owners.get(round_id)
-        if owner is not None and owner != str(gl.message.sender_address):
-            raise ValueError("only the round creator can compute the distribution")
+        self._require_round_admin(record)
 
         if record["status"] != "closed":
             raise ValueError("round must be closed before computing distribution")
@@ -432,9 +464,10 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
 
         return json.dumps(payouts)
 
-    @gl.public.write
+    @gl.public.write.payable
     def claim_payout(self, project_id: str) -> str:
         project = self._get_project(project_id)
+        self._require_project_owner(project)
 
         round_record = self._get_round(project["round_id"])
         if not round_record.get("distributed"):
@@ -442,9 +475,6 @@ Visit and consider each evidence link before scoring. Do not compute an overall 
 
         if project.get("claimed"):
             raise ValueError("payout already claimed")
-
-        if str(gl.message.sender_address) != project.get("submitter"):
-            raise ValueError("only the project's original submitter can claim its payout")
 
         amount = int(project.get("payout", "0"))
         if amount <= 0:
