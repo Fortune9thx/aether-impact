@@ -1,4 +1,4 @@
-import { Round } from "./types";
+import { Evaluation, Project, Round } from "./types";
 
 export const mockRounds: Round[] = [
   {
@@ -49,5 +49,69 @@ export const mockRounds: Round[] = [
     status: "closed",
     submissionCount: 21,
     createdAt: "2026-04-20",
+  },
+];
+
+export const mockProjects: Project[] = [
+  {
+    id: "p1",
+    roundId: "r1",
+    name: "Cartographer SDK",
+    description:
+      "An open-source SDK that maps GenLayer contract storage into typed client interfaces, cutting integration time for frontend teams.",
+    claimedImpact:
+      "Adopted by 40+ downstream projects, reducing integration time from days to hours based on developer surveys and dependent-repo counts.",
+    evidence: [
+      { id: "e1", label: "GitHub repo", url: "https://github.com/example/cartographer-sdk" },
+      { id: "e2", label: "npm downloads", url: "https://www.npmjs.com/package/cartographer-sdk" },
+      { id: "e3", label: "Dependent repos", url: "https://github.com/example/cartographer-sdk/network/dependents" },
+    ],
+  },
+];
+
+export const mockEvaluations: Evaluation[] = [
+  {
+    id: "eval-p1",
+    projectId: "p1",
+    overallScore: 84,
+    confidence: 78,
+    dimensionScores: [
+      {
+        dimensionId: "d1",
+        label: "Verifiable Impact",
+        score: 88,
+        reasoning:
+          "Dependent-repo count and npm download trends corroborate the claimed adoption figure independently of the submission's own framing.",
+      },
+      {
+        dimensionId: "d2",
+        label: "Technical Quality",
+        score: 82,
+        reasoning:
+          "Codebase shows consistent typing, test coverage, and a clear changelog, though some modules lack documentation.",
+      },
+      {
+        dimensionId: "d3",
+        label: "Ecosystem Value",
+        score: 85,
+        reasoning:
+          "Reduces a well-known integration bottleneck cited across multiple community discussions.",
+      },
+      {
+        dimensionId: "d4",
+        label: "Sustainability",
+        score: 76,
+        reasoning:
+          "Maintained by a single core contributor; commit cadence has slowed over the last two months.",
+      },
+    ],
+    reasoning:
+      "Cartographer SDK demonstrates strong, independently verifiable adoption and clear ecosystem value. The claimed impact is well substantiated by evidence rather than self-reported metrics alone. Confidence is moderated by single-maintainer risk and a narrowing contribution window, which affects long-term sustainability more than current impact.",
+    citedEvidence: [
+      "https://github.com/example/cartographer-sdk",
+      "https://www.npmjs.com/package/cartographer-sdk",
+      "https://github.com/example/cartographer-sdk/network/dependents",
+    ],
+    challenged: false,
   },
 ];
