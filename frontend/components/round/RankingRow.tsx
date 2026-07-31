@@ -26,7 +26,7 @@ export function RankingRow({
     >
       <Link
         href={`/rounds/${roundId}/projects/${project.id}`}
-        className="group grid grid-cols-[2.5rem_1fr_auto_auto] items-center gap-6 rounded-xl border border-border bg-surface px-5 py-4 transition-colors duration-450 hover:border-accent/30 hover:bg-surface-elevated"
+        className="group grid grid-cols-[2rem_1fr_auto] items-center gap-4 rounded-xl border border-border bg-surface px-4 py-4 transition-colors duration-450 hover:border-accent/30 hover:bg-surface-elevated sm:grid-cols-[2.5rem_1fr_auto_auto] sm:gap-6 sm:px-5"
       >
         <span className="font-mono text-sm text-text-secondary">
           {String(rank).padStart(2, "0")}
@@ -46,7 +46,7 @@ export function RankingRow({
           </p>
         </div>
 
-        <div className="flex flex-col items-end">
+        <div className="hidden flex-col items-end sm:flex">
           <span className="font-mono text-sm text-text-secondary">
             confidence
           </span>
@@ -55,7 +55,7 @@ export function RankingRow({
           </span>
         </div>
 
-        <span className="font-serif text-3xl text-accent">
+        <span className="font-serif text-2xl text-accent sm:text-3xl">
           {evaluation.overallScore}
         </span>
       </Link>
