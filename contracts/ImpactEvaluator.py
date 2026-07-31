@@ -123,9 +123,8 @@ Claimed impact:
 Evidence:
 {evidence_lines}
 
-Visit and consider each evidence link before scoring. Respond with a single JSON object only, matching exactly this shape:
+Visit and consider each evidence link before scoring. Do not compute an overall score yourself -- the contract derives it deterministically from your per-dimension scores. Respond with a single JSON object only, matching exactly this shape:
 {{
-  "overall_score": <int 0-100, weighted average across dimensions>,
   "confidence": <int 0-100>,
   "dimension_scores": [
     {{"label": "<dimension label>", "score": <int 0-100>, "reasoning": "<short justification>"}}
@@ -150,23 +149,42 @@ Visit and consider each evidence link before scoring. Respond with a single JSON
         result_text = gl.eq_principle.prompt_non_comparative(
             lambda: prompt,
             task=task,
-            criteria="Scores must be integers 0-100 per dimension, overall_score must be the weighted average, confidence must be 0-100, and reasoning must cite specific evidence links provided.",
+            criteria="Dimension scores must be integers between 0 and 100, confidence must be an integer between 0 and 100, and the reasoning should be substantively grounded in the description and evidence provided. Minor differences in wording or emphasis between validators are acceptable as long as the scores and overall judgment are reasonably close.",
         )
 
         return json.loads(self._extract_json(result_text))
 
+    def _compute_overall_score(self, dimension_scores: list, dimensions: list) -> int:
+        weight_by_label = {d["label"]: d["weight"] for d in dimensions}
+        total_weight = 0
+        weighted_sum = 0
+        for entry in dimension_scores:
+            weight = weight_by_label.get(entry["label"], 0)
+            weighted_sum += entry["score"] * weight
+            total_weight += weight
+        if total_weight == 0:
+            return 0
+        return round(weighted_sum / total_weight)
+
     def _store_evaluation(
-        self, evaluation_id: str, project_id: str, parsed: dict, challenged: bool
+        self,
+        evaluation_id: str,
+        project_id: str,
+        parsed: dict,
+        dimensions: list,
+        challenged: bool,
     ) -> None:
-        required = ("overall_score", "confidence", "dimension_scores", "reasoning")
+        required = ("confidence", "dimension_scores", "reasoning")
         for field in required:
             if field not in parsed:
                 raise ValueError(f"model output missing required field: {field}")
 
+        overall_score = self._compute_overall_score(parsed["dimension_scores"], dimensions)
+
         record = {
             "id": evaluation_id,
             "project_id": project_id,
-            "overall_score": parsed["overall_score"],
+            "overall_score": overall_score,
             "confidence": parsed["confidence"],
             "dimension_scores": parsed["dimension_scores"],
             "reasoning": parsed["reasoning"],
@@ -303,7 +321,9 @@ Visit and consider each evidence link before scoring. Respond with a single JSON
             round_record,
             task="Score a project submission against weighted evaluation dimensions using its description and cited evidence.",
         )
-        self._store_evaluation(evaluation_id, project_id, parsed, challenged=False)
+        self._store_evaluation(
+            evaluation_id, project_id, parsed, round_record["dimensions"], challenged=False
+        )
 
         return evaluation_id
 
@@ -337,6 +357,8 @@ Visit and consider each evidence link before scoring. Respond with a single JSON
             round_record,
             task="Re-score a project submission after a challenge added new evidence.",
         )
-        self._store_evaluation(evaluation_id, project_id, parsed, challenged=True)
+        self._store_evaluation(
+            evaluation_id, project_id, parsed, round_record["dimensions"], challenged=True
+        )
 
         return evaluation_id

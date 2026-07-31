@@ -4,8 +4,8 @@ A GenLayer-powered retroactive impact funding evaluation engine. DAOs, foundatio
 
 ## Live
 
-- **Frontend:** deployed via Vercel (see `docs/DEPLOYMENT.md` for the current URL)
-- **Contract:** `ImpactEvaluator.py` on GenLayer Bradbury testnet at `0x31aDeF6CB32e0DA12c3Dc3E8e023d8219A44734b`
+- **Frontend:** https://aether-impact.vercel.app
+- **Contract:** `ImpactEvaluator.py` on GenLayer Bradbury testnet at `0x39B6c36264213f26b9ae43f2E93Db84b7Aa58e3C`
 
 ## Project Overview
 
