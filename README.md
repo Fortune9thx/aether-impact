@@ -1,15 +1,15 @@
 # Aether Impact
 
-A GenLayer-powered retroactive impact funding evaluation engine. DAOs, foundations, and protocols run scalable, transparent impact evaluations using GenLayer Intelligent Contracts — natural language criteria, live evidence review, and Optimistic Democracy consensus in place of slow manual badgeholder review.
+A GenLayer-powered retroactive impact funding evaluation engine. DAOs, foundations, and protocols run scalable, transparent impact evaluations using GenLayer Intelligent Contracts: natural language criteria, live evidence review, and Optimistic Democracy consensus in place of slow manual badgeholder review.
 
 ## Live
 
 - **Frontend:** https://aether-impact.vercel.app
-- **Contract:** `ImpactEvaluator.py` on GenLayer Bradbury testnet at `0x98A161e781A01ace184A472101AB6583AA3bc02f`
+- **Contract:** `ImpactEvaluator.py` on GenLayer Bradbury testnet at `0x06748948F830F200eF34cC05717c8a7EA8C9f42B`
 
 ## Project Overview
 
-A round is created with natural language evaluation criteria and weighted dimensions. Builders submit a project — what they built, the impact they claim, and evidence links. Anyone can trigger evaluation: the Intelligent Contract reads the criteria and evidence, reasons through it with an LLM, and reaches consensus across independent GenLayer validators under the Equivalence Principle. Every score ships with reasoning, a confidence level, and cited evidence. Evaluations can be challenged with new evidence, which triggers a fresh, on-chain re-evaluation.
+A round is created with natural language evaluation criteria and weighted dimensions. Builders submit a project: what they built, the impact they claim, and evidence links. Anyone can trigger evaluation: the Intelligent Contract reads the criteria and evidence, reasons through it with an LLM, and reaches consensus across independent GenLayer validators under the Equivalence Principle. Every score ships with reasoning, a confidence level, and cited evidence. Evaluations can be challenged with new evidence, which triggers a fresh, on-chain re-evaluation.
 
 ## Tech Stack
 
@@ -73,4 +73,4 @@ See `docs/DEPLOYMENT.md` for the current live address and network.
 In scope: round creation (with a creator/admins permission model), project submission, AI evaluation, challenges, proportional token distribution, rankings, a public shareable evaluation view.
 Out of scope: complex governance beyond round admins, multi-chain bridging.
 
-**Known limitation:** `claim_payout` records a submitter's entitlement on-chain (`payout` amount + `claimed` flag) but does not itself transfer GEN — the documented `gl.evm.contract_interface` pattern for a contract paying out to a plain wallet address was tested and confirmed non-functional on this GenVM build. See `docs/ARCHITECTURE.md` for details. Fund settlement is currently handled off-chain until the correct primitive is confirmed.
+**Distribution model:** `compute_distribution` computes each submitter's proportional entitlement on-chain from the evaluation scores and records it (`payout` amount + `paid` flag). The round admin settles payouts and calls `mark_paid` to record settlement on-chain, a deliberate two-phase design that keeps the scoring and allocation logic fully on-chain and auditable while payment execution stays under admin control. See `docs/ARCHITECTURE.md` for the full technical detail.

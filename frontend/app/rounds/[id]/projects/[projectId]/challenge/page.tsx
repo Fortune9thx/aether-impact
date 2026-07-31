@@ -26,7 +26,7 @@ export default function ChallengePage({
 }) {
   const { id, projectId } = use(params);
   const router = useRouter();
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
 
   const { data: project, loading: projectLoading, error: projectError } =
     useContractRead<Project>("get_project", [projectId], [projectId]);
@@ -58,7 +58,7 @@ export default function ChallengePage({
     try {
       const evidencePayload = evidence.map(({ label, url }) => ({ label, url }));
 
-      await writeContract(address, window.ethereum, "challenge_evaluation", [
+      await writeContract(address, provider, "challenge_evaluation", [
         projectId,
         JSON.stringify(evidencePayload),
       ]);

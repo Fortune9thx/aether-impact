@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 const steps = [
   {
     title: "Define Criteria",
-    body: "A round is created with natural language evaluation criteria and weighted dimensions — no rigid rubric, just a clear statement of what matters.",
+    body: "A round is created with natural language evaluation criteria and weighted dimensions: no rigid rubric, just a clear statement of what matters.",
   },
   {
     title: "Submit Evidence",
@@ -18,11 +18,11 @@ const steps = [
   },
   {
     title: "Intelligent Evaluation",
-    body: "A GenLayer Intelligent Contract reads the criteria and evidence, reasons through it with an LLM, and reaches consensus across independent validators under the Equivalence Principle — not a single model's opinion, but agreement across a decentralized set of them.",
+    body: "A GenLayer Intelligent Contract reads the criteria and evidence, reasons through it with an LLM, and reaches consensus across independent validators under the Equivalence Principle: not a single model's opinion, but agreement across a decentralized set of them.",
   },
   {
     title: "Challenge & Re-evaluate",
-    body: "Every score ships with reasoning and cited sources. Disagree, and you can submit new evidence — the contract re-evaluates with the full picture, on-chain, permanently.",
+    body: "Every score ships with reasoning and cited sources. Disagree, and you can submit new evidence: the contract re-evaluates with the full picture, on-chain, permanently.",
   },
 ];
 
@@ -34,13 +34,13 @@ export default function AboutPage() {
       </h1>
 
       <p className="mt-6 max-w-2xl text-lg leading-relaxed text-text-secondary">
-        Retroactive public goods funding — like Optimism&apos;s RetroPGF —
+        Retroactive public goods funding, like Optimism&apos;s RetroPGF,
         proved that paying for impact after it happens beats guessing at
         grants beforehand. But it doesn&apos;t scale: badgeholders spend weeks
         manually reviewing hundreds of submissions, and every round starts
         from zero. Aether Impact replaces that bottleneck with a GenLayer
         Intelligent Contract that reads evidence, reasons transparently, and
-        reaches verifiable consensus — at the speed of a transaction, not a
+        reaches verifiable consensus at the speed of a transaction, not a
         committee.
       </p>
 
@@ -70,9 +70,10 @@ export default function AboutPage() {
           On-chain, by design
         </h2>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-text-secondary">
-          Every round, submission, evaluation, and challenge lives on GenLayer
-          — nothing here is a database backing a UI. The contract itself is
-          the decision-maker; this interface only reads and writes to it.
+          Every round, submission, evaluation, and challenge lives on
+          GenLayer: nothing here is a database backing a UI. The contract
+          itself is the decision-maker; this interface only reads and writes
+          to it.
         </p>
 
         <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6 font-mono text-xs text-text-secondary sm:flex-row sm:items-center sm:justify-between">

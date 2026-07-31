@@ -61,6 +61,49 @@ function cleanContractError(err: unknown): Error {
   return err instanceof Error ? err : new Error(raw);
 }
 
+// Tokens that show up as structural noise inside GenVM's binary calldata
+// encoding of a UserError (frame/module metadata, not the message itself).
+const CALLDATA_NOISE_TOKENS = new Set([
+  "kind",
+  "data",
+  "events",
+  "fingerprint",
+  "frame",
+  "func",
+  "module_name",
+  "python",
+  "memories",
+  "storage_changes",
+  "UserError",
+]);
+
+// A FINISHED_WITH_ERROR transaction's actual message is embedded inside a
+// binary (msgpack-like) calldata blob returned by debugTraceTransaction --
+// there is no public decoder for it in genlayer-js. Extract the longest
+// printable-ASCII run that isn't one of the known structural tokens; this is
+// a heuristic, not a real decode, so it always has a safe generic fallback.
+function extractMessageFromReturnData(returnDataHex: string): string | null {
+  const hex = returnDataHex.startsWith("0x") ? returnDataHex.slice(2) : returnDataHex;
+  if (hex.length === 0 || hex.length % 2 !== 0) return null;
+
+  // Decode as raw latin1 bytes (this runs in the browser, so no Buffer) --
+  // every byte maps 1:1 to a char code, which is all the printable-ASCII
+  // regex below needs.
+  let text = "";
+  for (let i = 0; i < hex.length; i += 2) {
+    const byte = parseInt(hex.slice(i, i + 2), 16);
+    if (Number.isNaN(byte)) return null;
+    text += String.fromCharCode(byte);
+  }
+
+  const candidates = text.match(/[\x20-\x7e]{6,}/g) ?? [];
+  const filtered = candidates.filter((c) => !CALLDATA_NOISE_TOKENS.has(c.trim()));
+  if (filtered.length === 0) return null;
+
+  filtered.sort((a, b) => b.length - a.length);
+  return filtered[0].trim();
+}
+
 let readClient: ReturnType<typeof createClient> | null = null;
 
 export function getReadClient() {
@@ -119,7 +162,14 @@ export async function writeContract(
     // CANCELED. Those are not failures genlayer-js throws on, but they ARE
     // failures: the write did not apply. Check the real status explicitly so
     // the UI never reports success when nothing was actually stored.
-    const finalStatus = (receipt as { status?: string })?.status;
+    //
+    // The `status` field on the receipt is numeric at runtime (e.g. 5), not
+    // the string enum value its own type declares -- the reliable string is
+    // `status_name` (snake_case; the camelCase `statusName` the types
+    // promise is undefined at runtime). Verified directly against a live
+    // transaction before relying on it here.
+    const asRecord = receipt as Record<string, unknown>;
+    const finalStatus = (asRecord.status_name ?? asRecord.statusName) as string | undefined;
     if (finalStatus && finalStatus !== "ACCEPTED" && finalStatus !== "FINALIZED") {
       if (finalStatus === "UNDETERMINED") {
         throw new Error(
@@ -127,6 +177,25 @@ export async function writeContract(
         );
       }
       throw new Error(`Transaction did not succeed (status: ${finalStatus}). Please try again.`);
+    }
+
+    // Reaching consensus (ACCEPTED/FINALIZED) only means validators agreed on
+    // the outcome -- it does NOT mean the contract call itself succeeded. A
+    // validation error inside the method (e.g. raising gl.vm.UserError) still
+    // reaches ACCEPTED, but txExecutionResultName reports FINISHED_WITH_ERROR.
+    // Confirmed directly: without this check, every rejected write silently
+    // reported success to the UI.
+    const executionResult = asRecord.txExecutionResultName as string | undefined;
+    if (executionResult === "FINISHED_WITH_ERROR") {
+      let message = "The contract rejected this action. Please check your input and try again.";
+      try {
+        const trace = await client.debugTraceTransaction({ hash });
+        const extracted = extractMessageFromReturnData(trace.return_data);
+        if (extracted) message = extracted;
+      } catch {
+        // best-effort only -- fall back to the generic message above
+      }
+      throw new Error(message);
     }
 
     return hash as string;

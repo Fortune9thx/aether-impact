@@ -22,7 +22,7 @@ function newEvidence(): DraftEvidenceLink {
 function SubmitForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
 
   const { data: rounds, loading: roundsLoading, error: roundsError } =
     useContractRead<Round[]>("list_rounds", []);
@@ -64,7 +64,7 @@ function SubmitForm() {
     try {
       const evidencePayload = evidence.map(({ label, url }) => ({ label, url }));
 
-      await writeContract(address, window.ethereum, "submit_project", [
+      await writeContract(address, provider, "submit_project", [
         roundId,
         name,
         description,
@@ -165,7 +165,7 @@ function SubmitForm() {
 
           <FormSection
             label="Claimed impact"
-            hint="Be specific — this is the claim the Intelligent Contract will verify against your evidence."
+            hint="Be specific: this is the claim the Intelligent Contract will verify against your evidence."
           >
             <textarea
               required

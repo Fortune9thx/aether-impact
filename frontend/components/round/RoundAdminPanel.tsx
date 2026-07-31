@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { isRoundAdmin, Round } from "@/lib/types";
 import { writeContract } from "@/lib/genlayer";
+import { parseGen } from "@/lib/format";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { ErrorState } from "@/components/ui/AsyncState";
 
@@ -21,23 +22,11 @@ export function RoundAdminPanel({
   return (
     <div className="flex flex-col gap-6">
       {!round.distributed && round.status === "open" && (
-        <LifecycleAction
-          round={round}
-          onChanged={onChanged}
-          action="close_round"
-          label="Close round to submissions"
-          hint="Submissions stop; evaluated projects can still be challenged until distribution."
-        />
+        <CloseRoundAction round={round} onChanged={onChanged} />
       )}
 
-      {!round.distributed && round.status === "closed" && Number(round.pool) > 0 && (
-        <LifecycleAction
-          round={round}
-          onChanged={onChanged}
-          action="compute_distribution"
-          label="Compute distribution"
-          hint="Splits the funding pool proportionally across evaluated projects by final score -- irreversible."
-        />
+      {!round.distributed && round.status === "closed" && (
+        <ComputeDistributionAction round={round} onChanged={onChanged} />
       )}
 
       <AdminManagement round={round} onChanged={onChanged} />
@@ -45,20 +34,14 @@ export function RoundAdminPanel({
   );
 }
 
-function LifecycleAction({
+function CloseRoundAction({
   round,
   onChanged,
-  action,
-  label,
-  hint,
 }: {
   round: Round;
   onChanged: () => void;
-  action: "close_round" | "compute_distribution";
-  label: string;
-  hint: string;
 }) {
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,10 +50,10 @@ function LifecycleAction({
     if (!address) return;
     setBusy(true);
     try {
-      await writeContract(address, window.ethereum, action, [round.id]);
+      await writeContract(address, provider, "close_round", [round.id]);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to run ${action}`);
+      setError(err instanceof Error ? err.message : "Failed to close round");
     } finally {
       setBusy(false);
     }
@@ -78,14 +61,93 @@ function LifecycleAction({
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-7">
-      <p className="text-sm text-text-secondary">{hint}</p>
+      <p className="text-sm text-text-secondary">
+        Submissions stop; evaluated projects can still be challenged until
+        distribution.
+      </p>
       <div className="mt-5">
         <button
           onClick={handleRun}
           disabled={busy}
           className="rounded-full border border-border bg-surface-elevated px-5 py-2.5 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40 disabled:cursor-wait disabled:opacity-60"
         >
-          {busy ? "Working..." : label}
+          {busy ? "Working..." : "Close round to submissions"}
+        </button>
+      </div>
+      {error && (
+        <div className="mt-4">
+          <ErrorState message={error} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComputeDistributionAction({
+  round,
+  onChanged,
+}: {
+  round: Round;
+  onChanged: () => void;
+}) {
+  const { address, provider } = useWallet();
+  const [pool, setPool] = useState("0.1");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleRun() {
+    setError(null);
+    if (!address) return;
+
+    let poolWei: bigint;
+    try {
+      poolWei = parseGen(pool);
+      if (poolWei <= BigInt(0)) throw new Error("Pool must be greater than 0");
+    } catch {
+      setError("Enter a valid GEN amount.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await writeContract(address, provider, "compute_distribution", [
+        round.id,
+        poolWei.toString(),
+      ]);
+      onChanged();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to compute distribution",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-surface p-7">
+      <p className="text-sm text-text-secondary">
+        Enter the total pool being distributed, split proportionally across
+        evaluated projects by final score -- irreversible. Payout settlement
+        happens off-chain; use the Rankings page to mark each entitlement
+        paid once settled.
+      </p>
+      <div className="mt-5 flex items-center gap-3">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={pool}
+          onChange={(e) => setPool(e.target.value)}
+          className="w-32 rounded-xl border border-border bg-surface-elevated px-4 py-2.5 font-mono text-sm text-text-primary focus:border-accent/40 focus:outline-none"
+        />
+        <span className="text-sm text-text-secondary">GEN</span>
+        <button
+          onClick={handleRun}
+          disabled={busy}
+          className="ml-auto rounded-full border border-border bg-surface-elevated px-5 py-2.5 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40 disabled:cursor-wait disabled:opacity-60"
+        >
+          {busy ? "Working..." : "Compute distribution"}
         </button>
       </div>
       {error && (
@@ -104,7 +166,7 @@ function AdminManagement({
   round: Round;
   onChanged: () => void;
 }) {
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
   const [newAdmin, setNewAdmin] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +176,7 @@ function AdminManagement({
     if (!address || !newAdmin.trim()) return;
     setBusy("add");
     try {
-      await writeContract(address, window.ethereum, "add_admin", [round.id, newAdmin.trim()]);
+      await writeContract(address, provider, "add_admin", [round.id, newAdmin.trim()]);
       setNewAdmin("");
       onChanged();
     } catch (err) {
@@ -129,7 +191,7 @@ function AdminManagement({
     if (!address) return;
     setBusy(admin);
     try {
-      await writeContract(address, window.ethereum, "remove_admin", [round.id, admin]);
+      await writeContract(address, provider, "remove_admin", [round.id, admin]);
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove admin");

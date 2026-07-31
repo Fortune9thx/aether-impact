@@ -15,7 +15,7 @@ export default function Home() {
 
         <p className="max-w-xl text-lg leading-relaxed text-text-secondary">
           Aether Impact replaces slow human badgeholder review with GenLayer
-          Intelligent Contracts — structured scores, cited reasoning, and
+          Intelligent Contracts: structured scores, cited reasoning, and
           confidence, at scale.
         </p>
 
@@ -48,7 +48,7 @@ export default function Home() {
           },
           {
             title: "Challenge & Verify",
-            body: "Every score ships with reasoning and citations — and can be challenged with new evidence.",
+            body: "Every score ships with reasoning and citations, and can be challenged with new evidence.",
           },
         ].map((item) => (
           <div key={item.title} className="bg-surface p-8">

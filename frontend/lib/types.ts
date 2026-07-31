@@ -47,7 +47,7 @@ export type Project = {
   submitted_at: string;
   submitter: string;
   payout: string; // wei, as a string
-  claimed: boolean;
+  paid: boolean;
 };
 
 export function isProjectOwner(project: Project, address: string | null): boolean {
@@ -60,7 +60,7 @@ export type Payout = {
   name: string;
   submitter: string;
   payout: string;
-  claimed: boolean;
+  paid: boolean;
 };
 
 export type DimensionScore = {

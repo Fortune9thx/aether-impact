@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft, Sparkles } from "lucide-react";
-import { Evaluation, Project, Round } from "@/lib/types";
+import { Evaluation, isRoundAdmin, Project, Round } from "@/lib/types";
 import { isContractConfigured, readContract, writeContract } from "@/lib/genlayer";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { useContractRead } from "@/lib/use-contract-read";
@@ -20,7 +20,7 @@ export default function EvaluationPage({
   params: Promise<{ id: string; projectId: string }>;
 }) {
   const { id, projectId } = use(params);
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
 
   const { data: round, loading: roundLoading, error: roundError } =
     useContractRead<Round>("get_round", [id], [id]);
@@ -74,7 +74,7 @@ export default function EvaluationPage({
 
     setRunning(true);
     try {
-      await writeContract(address, window.ethereum, "evaluate_project", [
+      await writeContract(address, provider, "evaluate_project", [
         projectId,
       ]);
       await fetchEvaluation();
@@ -216,27 +216,28 @@ export default function EvaluationPage({
                   {formatGen(project.payout)} GEN
                 </p>
                 <p className="mt-1 text-xs text-text-secondary">
-                  Recording a claim confirms your entitlement on-chain; fund
-                  settlement is currently handled off-chain.
+                  Payout settlement is handled off-chain by the
+                  round admin, who marks this entitlement as paid once
+                  settled.
                 </p>
               </div>
 
-              {project.claimed ? (
-                <span className="text-sm text-text-secondary">Claim recorded</span>
-              ) : address?.toLowerCase() === project.submitter.toLowerCase() ? (
+              {project.paid ? (
+                <span className="text-sm text-text-secondary">Paid</span>
+              ) : round && isRoundAdmin(round, address) ? (
                 <button
                   onClick={async () => {
                     setClaimError(null);
                     if (!address) return;
                     setClaiming(true);
                     try {
-                      await writeContract(address, window.ethereum, "claim_payout", [
+                      await writeContract(address, provider, "mark_paid", [
                         project.id,
                       ]);
                       await refetchProject();
                     } catch (err) {
                       setClaimError(
-                        err instanceof Error ? err.message : "Failed to claim payout",
+                        err instanceof Error ? err.message : "Failed to mark as paid",
                       );
                     } finally {
                       setClaiming(false);
@@ -245,11 +246,11 @@ export default function EvaluationPage({
                   disabled={claiming}
                   className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
                 >
-                  {claiming ? "Recording..." : "Record Claim"}
+                  {claiming ? "Marking..." : "Mark Paid"}
                 </button>
               ) : (
                 <span className="text-sm text-text-secondary">
-                  Only the submitter can claim
+                  Awaiting payout
                 </span>
               )}
             </div>

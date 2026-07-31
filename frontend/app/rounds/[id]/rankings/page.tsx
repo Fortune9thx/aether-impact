@@ -8,7 +8,7 @@ import { isContractConfigured, readContract, writeContract } from "@/lib/genlaye
 import { useContractRead } from "@/lib/use-contract-read";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { RankingRow } from "@/components/round/RankingRow";
-import { ClaimPayoutRow } from "@/components/round/ClaimPayoutRow";
+import { PayoutRow } from "@/components/round/PayoutRow";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 
 export default function RankingsPage({
@@ -17,7 +17,7 @@ export default function RankingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { address, connect, error: walletError } = useWallet();
+  const { address, provider, connect, error: walletError } = useWallet();
 
   const { data: round, loading: roundLoading, error: roundError } =
     useContractRead<Round>("get_round", [id], [id]);
@@ -47,7 +47,7 @@ export default function RankingsPage({
             typeof raw === "string" ? JSON.parse(raw) : raw
           ) as Evaluation;
         } catch {
-          // no evaluation yet for this project — expected, not an error
+          // no evaluation yet for this project, expected, not an error
         }
       }),
     );
@@ -71,7 +71,7 @@ export default function RankingsPage({
 
     setRunningId(projectId);
     try {
-      await writeContract(address, window.ethereum, "evaluate_project", [
+      await writeContract(address, provider, "evaluate_project", [
         projectId,
       ]);
       await fetchEvaluations();
@@ -151,18 +151,19 @@ export default function RankingsPage({
           </h2>
           <p className="mt-2 text-sm text-text-secondary">
             The funding pool has been split proportionally by final score.
-            Submitters can record their claim below; fund settlement is
-            currently handled off-chain.
+            Payout settlement is handled off-chain by the round
+            admin, who marks each entitlement as paid once settled.
           </p>
           <div className="mt-4 flex flex-col gap-3">
             {payouts
               .filter((p) => Number(p.payout) > 0)
               .sort((a, b) => Number(b.payout) - Number(a.payout))
               .map((payout) => (
-                <ClaimPayoutRow
+                <PayoutRow
                   key={payout.project_id}
                   payout={payout}
-                  onClaimed={refetchPayouts}
+                  round={round}
+                  onChanged={refetchPayouts}
                 />
               ))}
           </div>

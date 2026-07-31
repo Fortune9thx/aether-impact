@@ -8,7 +8,7 @@ export default function NotFound() {
         Nothing evaluated here
       </h1>
       <p className="mt-3 text-text-secondary">
-        This page, round, or project doesn&apos;t exist — or hasn&apos;t been
+        This page, round, or project doesn&apos;t exist, or hasn&apos;t been
         submitted yet.
       </p>
       <Link

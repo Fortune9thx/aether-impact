@@ -6,7 +6,7 @@ import { Project, Round } from "@/lib/types";
 import { useContractRead } from "@/lib/use-contract-read";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
-import { FundRoundPanel } from "@/components/round/FundRoundPanel";
+import { formatGen } from "@/lib/format";
 import { RoundAdminPanel } from "@/components/round/RoundAdminPanel";
 
 export default function RoundDetailPage({
@@ -85,8 +85,18 @@ export default function RoundDetailPage({
         </div>
       </div>
 
-      <div className="mt-6">
-        <FundRoundPanel round={round} onFunded={refetchRound} />
+      <div className="mt-6 rounded-2xl border border-border bg-surface p-7">
+        <div className="flex items-center justify-between">
+          <h2 className="font-serif text-lg text-text-primary">Funding Pool</h2>
+          <span className="font-mono text-sm text-accent">
+            {formatGen(round.pool)} GEN
+          </span>
+        </div>
+        <p className="mt-3 text-sm text-text-secondary">
+          {round.distributed
+            ? "This round's distribution has been computed and recorded."
+            : "The round admin sets the pool amount when computing distribution, after the round is closed. Payouts are settled by the round admin."}
+        </p>
       </div>
 
       <div className="mt-6">

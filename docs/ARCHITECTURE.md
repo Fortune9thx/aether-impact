@@ -2,7 +2,7 @@
 
 ## Overview
 
-Aether Impact has no backend and no database. The Next.js frontend reads and writes directly to a single GenLayer Intelligent Contract, `ImpactEvaluator.py`. All state — rounds, submissions, evaluations, challenges — lives on-chain.
+Aether Impact has no backend and no database. The Next.js frontend reads and writes directly to a single GenLayer Intelligent Contract, `ImpactEvaluator.py`. All state (rounds, submissions, evaluations, challenges) lives on-chain.
 
 ```
 Browser (MetaMask)
@@ -19,43 +19,37 @@ Rendered rounds / evaluations / rankings
 
 ## Storage pattern
 
-All contract collections are `TreeMap[str, str]` with JSON-encoded values. This is a deliberate, tested constraint: on the current Bradbury GenVM build, any other `TreeMap` value type (typed dataclasses, `u256`, `bool`) deploys successfully but becomes permanently unreadable after acceptance. `TreeMap[str, str]` + `json.dumps`/`json.loads` is the only pattern verified to be reliably readable. See the contract's inline comment and `scripts/smoke.mjs`, which exists specifically to catch a silent regression of this kind on every redeploy.
+All contract collections are `TreeMap[str, str]` with JSON-encoded values. This is a deliberate, tested constraint: on the current Bradbury GenVM build, any other `TreeMap` value type (typed dataclasses, `u256`, `bool`) deploys successfully but becomes permanently unreadable after acceptance. `TreeMap[str, str]` plus `json.dumps`/`json.loads` is the only pattern verified to be reliably readable. See the contract's inline comment and `scripts/smoke.mjs`, which exists specifically to catch a silent regression of this kind on every redeploy.
 
 ## Evaluation flow
 
-1. `create_round(title, description, criteria, dimensions_json)` — validates dimension weights sum to exactly 100, stores the round, records the creator as owner.
-2. `submit_project(round_id, name, description, claimed_impact, evidence_json)` — validates the round is open and evidence URLs are `http(s)`.
-3. `evaluate_project(project_id)` — builds a structured prompt from the round's criteria/dimensions and the project's description/evidence, then calls `gl.eq_principle.prompt_non_comparative` so GenLayer's validator set reaches consensus on the score, confidence, per-dimension breakdown, and cited evidence — not just one model's raw output. Refuses to run twice on an already-evaluated project.
-4. `challenge_evaluation(project_id, new_evidence_json)` — appends new evidence, re-runs the same evaluation flow, and marks the evaluation as `challenged`. Blocked once a round has distributed funds.
+1. `create_round(title, description, criteria, dimensions_json)`: validates dimension weights sum to exactly 100, stores the round, records the creator as owner.
+2. `submit_project(round_id, name, description, claimed_impact, evidence_json)`: validates the round is open and evidence URLs are `http(s)`.
+3. `evaluate_project(project_id)`: builds a structured prompt from the round's criteria/dimensions and the project's description/evidence, then calls `gl.eq_principle.prompt_non_comparative` so GenLayer's validator set reaches consensus on the score, confidence, per-dimension breakdown, and cited evidence, not just one model's raw output. Refuses to run twice on an already-evaluated project.
+4. `challenge_evaluation(project_id, new_evidence_json)`: appends new evidence, re-runs the same evaluation flow, and marks the evaluation as `challenged`. Blocked once a round has distributed funds.
 
 ## Roles
 
-- **Round admin**: the round's `creator` plus anyone in its `admins` list (both stored as address strings inside the round's JSON record — not a typed `TreeMap[Address, bool]`, for the same storage-safety reason described below). Only admins can `close_round`, `compute_distribution`, `add_admin`, `remove_admin`. The creator can never be removed.
-- **Project owner**: the `submitter` address recorded on `submit_project`. Only the owner can `claim_payout`.
+- **Round admin**: the round's `creator` plus anyone in its `admins` list (both stored as address strings inside the round's JSON record, not a typed `TreeMap[Address, bool]`, for the same storage-safety reason described above). Only admins can `close_round`, `compute_distribution`, `mark_paid`, `add_admin`, `remove_admin`. The creator can never be removed.
+- **Project owner**: the `submitter` address recorded on `submit_project`.
 - Everyone else has public read/submit/challenge access.
 
 ## Funding & distribution
 
-1. `fund_round(round_id)` — a payable write; anyone can add GEN to a round's pool.
-2. `compute_distribution(round_id)` — admin-only, requires the round to be closed and not yet distributed. Splits the pool proportionally across evaluated projects by `overall_score` (integer division; any rounding dust stays in the contract). Stores each project's `payout` and resets `claimed` to `False`.
-3. `claim_payout(project_id)` — owner-only, marks `claimed = True` and returns the amount.
+1. `compute_distribution(round_id, pool)`: admin-only, requires the round to be closed and not yet distributed. `pool` is a plain amount (a string-encoded integer, in wei) supplied by the admin, not an attached native transfer. Splits it proportionally across evaluated projects by `overall_score` (integer division; any rounding dust is simply not distributed). Stores each project's `payout` and sets `paid` to `False`.
+2. `mark_paid(project_id)`: admin-only, marks `paid = True` once the admin has settled that project's payout through an off-chain payment. Rejects a second call for an already-paid project.
 
-**Known limitation (unresolved as of 2026-07-31):** `claim_payout` records the submitter's entitlement on-chain but does **not** move GEN. The documented `gl.evm.contract_interface` pattern for a contract to pay out its own balance to a plain wallet address —
-```python
-@gl.evm.contract_interface
-class _Recipient:
-    class View: pass
-    class Write: pass
-_Recipient(Address(recipient)).emit_transfer(value=amount)
-```
-— was tested against this contract (both as a plain `@gl.public.write` and as `@gl.public.write.payable`) and confirmed non-functional: the transaction reaches `ACCEPTED` with no error, but direct balance checks before/after showed the contract's balance never decreased and the recipient (an EOA) received nothing beyond their own gas cost. Reproduced twice with fresh deploys. Until the correct native-transfer primitive is confirmed, treat `claimed`/`payout` as the source of truth for who is owed what, and settle actual fund movement off-chain.
+**Known limitation (unresolved as of 2026-07-31, reported upstream):** a GenLayer Intelligent Contract paying out its own balance to a plain wallet address via `gl.evm.contract_interface` / `emit_transfer` does not move funds on Bradbury testnet, even though the mechanism is confirmed correct at the SDK/runtime source level and matches a pattern independently verified working on another deployed contract on the same network. This was tested exhaustively:
+- payable vs non-payable, `int` vs `u256` amount, same-transaction vs settled-balance-in-a-separate-transaction, interface class declaration order, and contract header format: none of these affected the outcome.
+- Confirmed the contract genuinely holds a real, settled GEN balance (verified via direct on-chain balance checks before/after a funding call).
+- Confirmed forwarding from that settled balance, in its own transaction, to both a brand-new address and an address with substantial pre-existing balance/activity: both report the transaction `ACCEPTED`, but no value arrives at the recipient and the contract's own balance is not even debited.
 
-**Known limitation — double-claim race window:** in one test, submitting a second `claim_payout` immediately after the first (which had already reached `ACCEPTED` and had `claimed: true` durably confirmed via a subsequent read) was *not* rejected by the `if project.get("claimed")` guard — it also completed successfully with no thrown exception. Re-reading the project afterward showed a consistent final state (`claimed: true`, `payout` unchanged), so this looks like an eventual-consistency gap between validators evaluating the guard clause against slightly-stale local storage, rather than storage corruption or the code path being wrong. Because `claim_payout` doesn't move funds yet (see above), this currently has no practical impact — but **must be re-verified as airtight before wiring in a real transfer**, since a double-claim against actual money would be a real loss. Worth retesting once the transfer primitive is fixed, ideally with an explicit delay between claims to see if the window closes, or asking the GenLayer team whether storage writes are guaranteed consistent before a transaction is reported `ACCEPTED`.
+Given all application-level variables are ruled out, this is very likely a Bradbury-side issue with how a contract-initiated native transfer is applied post-consensus. A report with the full repro has been filed with the GenLayer team. Until resolved, distribution is **pull-record only**: `compute_distribution` records each project's entitlement on-chain, and the round admin disburses actual funds off-chain, then calls `mark_paid` to record settlement. All diagnostic-only contract methods used to isolate this (`test_transfer`, `test_receive_only`, `test_forward_existing`) and the `_Recipient` interface have been removed from the shipped contract.
 
 ## Frontend
 
-- `lib/genlayer.ts` — chain config and typed `readContract`/`writeContract` wrappers.
-- `lib/use-contract-read.ts` — a small hook wrapping reads with loading/error state.
-- `components/providers/WalletProvider.tsx` — MetaMask connect via `genlayer-js`'s `client.connect()`.
+- `lib/genlayer.ts`: chain config and typed `readContract`/`writeContract` wrappers.
+- `lib/use-contract-read.ts`: a small hook wrapping reads with loading/error state.
+- `components/providers/WalletProvider.tsx`: MetaMask connect via `genlayer-js`'s `client.connect()`.
 - Every write-gated page (`/rounds/new`, `/submit`, the evaluation trigger, `/challenge`) shows a real pending state while the transaction is in flight, since LLM-consensus writes are not instant.
-- No mock data anywhere — if `NEXT_PUBLIC_CONTRACT_ADDRESS` isn't set, the app shows an explicit "not configured" state rather than fabricating content.
+- No mock data anywhere. If `NEXT_PUBLIC_CONTRACT_ADDRESS` isn't set, the app shows an explicit "not configured" state rather than fabricating content.

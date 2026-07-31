@@ -20,7 +20,7 @@ function newDimension(): DraftDimension {
 
 export default function NewRoundPage() {
   const router = useRouter();
-  const { address } = useWallet();
+  const { address, provider } = useWallet();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [criteria, setCriteria] = useState("");
@@ -61,7 +61,7 @@ export default function NewRoundPage() {
 
       const hash = await writeContract(
         address,
-        window.ethereum,
+        provider,
         "create_round",
         [title, description, criteria, JSON.stringify(dimensionsPayload)],
       );
@@ -110,7 +110,7 @@ export default function NewRoundPage() {
             required
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Public Goods Round — Q3 2026"
+            placeholder="e.g. Public Goods Round, Q3 2026"
             className="rounded-xl border border-border bg-surface px-4 py-3 text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
           />
         </FormSection>
@@ -128,7 +128,7 @@ export default function NewRoundPage() {
 
         <FormSection
           label="Evaluation criteria"
-          hint="Written in natural language — this is what the Intelligent Contract reads to judge submissions."
+          hint="Written in natural language: this is what the Intelligent Contract reads to judge submissions."
         >
           <textarea
             required

@@ -49,7 +49,17 @@ async function waitAccepted(hash, label) {
     await new Promise((r) => setTimeout(r, 3000));
     const tx = await client.getTransaction({ hash });
     process.stdout.write(`  ${label} poll ${i + 1}: status=${tx.status}\n`);
-    if (tx.status === 5 || tx.status === 7) return tx;
+    if (tx.status === 5 || tx.status === 7) {
+      // Reaching consensus (ACCEPTED/FINALIZED) only means validators agreed
+      // on the outcome -- it does NOT mean the contract call succeeded. A
+      // rejected write (gl.vm.UserError) still reaches this status; the
+      // actual outcome is txExecutionResultName. Same blind spot found and
+      // fixed in lib/genlayer.ts's writeContract this audit.
+      if (tx.txExecutionResultName === "FINISHED_WITH_ERROR") {
+        throw new Error(`${label} was rejected by the contract`);
+      }
+      return tx;
+    }
     if (tx.status === 6 || tx.status === 8) {
       throw new Error(`${label} failed with status ${tx.status}`);
     }
@@ -68,6 +78,22 @@ async function readListWithRetry(functionName, args, label) {
     await new Promise((r) => setTimeout(r, 2000));
   }
   throw new Error(`${label} stayed empty after retries`);
+}
+
+// After many test runs against the same live contract, list_rounds/
+// list_projects is never actually empty -- readListWithRetry's "retry until
+// non-empty" check is a no-op once history has accumulated, so it can return
+// a list that hasn't caught up to the write yet. Retry until the list is
+// strictly longer than a snapshot taken before the write instead.
+async function readListLongerThan(functionName, args, previousLength, label) {
+  for (let i = 0; i < 10; i++) {
+    const raw = await client.readContract({ address, functionName, args });
+    const parsed = JSON.parse(raw);
+    if (parsed.length > previousLength) return parsed;
+    console.log(`  ${label}: not grown yet, retrying (${i + 1}/10)...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`${label} never grew past ${previousLength} after retries`);
 }
 
 // Same read-after-write lag, but for a single object where we're waiting on
@@ -96,6 +122,10 @@ try {
     { label: "Verifiable Impact", weight: 60 },
     { label: "Code Quality", weight: 40 },
   ]);
+  const roundsBefore = JSON.parse(
+    await client.readContract({ address, functionName: "list_rounds", args: [] }),
+  );
+
   const createHash = await client.writeContract({
     address,
     functionName: "create_round",
@@ -109,10 +139,16 @@ try {
   });
   await waitAccepted(createHash, "create_round");
 
-  // Use the last (most recently appended) round, not a title match -- prior
-  // runs against this same contract can leave old "Lifecycle Test Round"
-  // entries behind, and .find() would silently grab a stale one.
-  const rounds = await readListWithRetry("list_rounds", [], "list_rounds");
+  // Use the last (most recently appended) round, and require the list to
+  // have actually grown past its pre-write length -- prior test runs against
+  // this same contract leave many rounds behind, so "non-empty" alone is not
+  // a reliable signal that this write has propagated to reads yet.
+  const rounds = await readListLongerThan(
+    "list_rounds",
+    [],
+    roundsBefore.length,
+    "list_rounds",
+  );
   const round = rounds[rounds.length - 1];
   record("create_round", !!round, round ? `id=${round.id}` : "round not found after write");
   if (!round) throw new Error("aborting: round not created");
@@ -193,28 +229,7 @@ try {
     `overall_score=${afterEval.overall_score}, challenged=${afterEval.challenged}`,
   );
 
-  log("7/10", "fund_round (send 0.01 GEN into the round's pool)");
-  const fundAmount = BigInt(10) ** BigInt(16); // 0.01 GEN in wei
-  const fundHash = await client.writeContract({
-    address,
-    functionName: "fund_round",
-    args: [round.id],
-    value: fundAmount,
-  });
-  await waitAccepted(fundHash, "fund_round");
-  const fundedRound = await readUntil(
-    "get_round",
-    [round.id],
-    (r) => r.pool === fundAmount.toString(),
-    "get_round (pool)",
-  );
-  record(
-    "fund_round",
-    fundedRound.pool === fundAmount.toString(),
-    `pool=${fundedRound.pool}`,
-  );
-
-  log("8/10", "close_round then compute_distribution");
+  log("7/10", "close_round then compute_distribution (pool passed as a plain argument)");
   const closeHash = await client.writeContract({
     address,
     functionName: "close_round",
@@ -223,62 +238,71 @@ try {
   });
   await waitAccepted(closeHash, "close_round");
 
+  const poolAmount = BigInt(10) ** BigInt(16); // 0.01 GEN, notional -- settlement is off-chain
   const distHash = await client.writeContract({
     address,
     functionName: "compute_distribution",
-    args: [round.id],
+    args: [round.id, poolAmount.toString()],
     value: BigInt(0),
   });
   await waitAccepted(distHash, "compute_distribution");
+
+  const distributedRound = await readUntil(
+    "get_round",
+    [round.id],
+    (r) => r.distributed === true,
+    "get_round (distributed)",
+  );
+  record(
+    "compute_distribution marks round distributed",
+    distributedRound.distributed === true && distributedRound.pool === poolAmount.toString(),
+    `distributed=${distributedRound.distributed}, pool=${distributedRound.pool}`,
+  );
 
   const payoutsRaw = await client.readContract({ address, functionName: "list_payouts", args: [round.id] });
   const payouts = JSON.parse(payoutsRaw);
   const myPayout = payouts.find((p) => p.project_id === project.id);
   record(
     "compute_distribution",
-    !!myPayout && BigInt(myPayout.payout) === fundAmount,
+    !!myPayout && BigInt(myPayout.payout) === poolAmount,
     `payout=${myPayout?.payout} (sole evaluated project should get the full pool)`,
   );
 
-  log(
-    "9/10",
-    "claim_payout (records entitlement on-chain -- does NOT transfer GEN; " +
-      "see docs/ARCHITECTURE.md 'Known limitation')",
-  );
-  const claimHash = await client.writeContract({
+  log("8/10", "mark_paid (round admin records off-chain settlement -- does NOT transfer GEN on-chain)");
+  const markPaidHash = await client.writeContract({
     address,
-    functionName: "claim_payout",
+    functionName: "mark_paid",
     args: [project.id],
     value: BigInt(0),
   });
-  await waitAccepted(claimHash, "claim_payout");
+  await waitAccepted(markPaidHash, "mark_paid");
 
-  const projectAfterClaim = await readUntil(
+  const projectAfterMarkPaid = await readUntil(
     "get_project",
     [project.id],
-    (p) => p.claimed === true,
-    "get_project (claimed)",
+    (p) => p.paid === true,
+    "get_project (paid)",
   );
   record(
-    "claim_payout marks claimed",
-    projectAfterClaim.claimed === true,
-    `claimed=${projectAfterClaim.claimed}`,
+    "mark_paid marks paid",
+    projectAfterMarkPaid.paid === true,
+    `paid=${projectAfterMarkPaid.paid}`,
   );
 
-  log("10/10", "claim_payout rejects a second claim");
-  let doubleClaimRejected = false;
+  log("9/10", "mark_paid rejects a second call for the same project");
+  let doubleMarkRejected = false;
   try {
-    const secondClaimHash = await client.writeContract({
+    const secondMarkHash = await client.writeContract({
       address,
-      functionName: "claim_payout",
+      functionName: "mark_paid",
       args: [project.id],
       value: BigInt(0),
     });
-    await waitAccepted(secondClaimHash, "second claim_payout");
+    await waitAccepted(secondMarkHash, "second mark_paid");
   } catch {
-    doubleClaimRejected = true;
+    doubleMarkRejected = true;
   }
-  record("double-claim is rejected", doubleClaimRejected);
+  record("double mark_paid is rejected", doubleMarkRejected);
 
   console.log("\n=== SUMMARY ===");
   for (const r of results) console.log(`${r.pass ? "PASS" : "FAIL"} ${r.name}`);

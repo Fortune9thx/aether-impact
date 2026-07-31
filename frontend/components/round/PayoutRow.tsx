@@ -2,39 +2,40 @@
 
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { Payout } from "@/lib/types";
+import { isRoundAdmin, Payout, Round } from "@/lib/types";
 import { formatGen } from "@/lib/format";
 import { writeContract } from "@/lib/genlayer";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { ErrorState } from "@/components/ui/AsyncState";
 
-export function ClaimPayoutRow({
+export function PayoutRow({
   payout,
-  onClaimed,
+  round,
+  onChanged,
 }: {
   payout: Payout;
-  onClaimed: () => void;
+  round: Round;
+  onChanged: () => void;
 }) {
-  const { address, connect } = useWallet();
-  const [claiming, setClaiming] = useState(false);
+  const { address, provider } = useWallet();
+  const [marking, setMarking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isSubmitter =
-    !!address && address.toLowerCase() === payout.submitter.toLowerCase();
+  const canMarkPaid = isRoundAdmin(round, address);
 
-  async function handleClaim() {
+  async function handleMarkPaid() {
     setError(null);
     if (!address) return;
-    setClaiming(true);
+    setMarking(true);
     try {
-      await writeContract(address, window.ethereum, "claim_payout", [
+      await writeContract(address, provider, "mark_paid", [
         payout.project_id,
       ]);
-      onClaimed();
+      onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to claim payout");
+      setError(err instanceof Error ? err.message : "Failed to mark as paid");
     } finally {
-      setClaiming(false);
+      setMarking(false);
     }
   }
 
@@ -59,29 +60,22 @@ export function ClaimPayoutRow({
           {formatGen(payout.payout)} GEN
         </span>
 
-        {payout.claimed ? (
+        {payout.paid ? (
           <span className="flex items-center gap-1.5 text-xs text-text-secondary">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Claim recorded
+            Paid
           </span>
-        ) : isSubmitter ? (
+        ) : canMarkPaid ? (
           <button
-            onClick={handleClaim}
-            disabled={claiming}
-            title="Records your entitlement on-chain. Fund settlement is currently handled off-chain."
+            onClick={handleMarkPaid}
+            disabled={marking}
+            title="Marks this entitlement as settled after paying the submitter off-chain."
             className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
           >
-            {claiming ? "Recording..." : "Record Claim"}
-          </button>
-        ) : !address ? (
-          <button
-            onClick={connect}
-            className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40"
-          >
-            Connect Wallet
+            {marking ? "Marking..." : "Mark Paid"}
           </button>
         ) : (
-          <span className="text-xs text-text-secondary">Not yours</span>
+          <span className="text-xs text-text-secondary">Awaiting payout</span>
         )}
       </div>
     </div>
