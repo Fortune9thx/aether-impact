@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { Logo } from "./ui/Logo";
+import { WalletButton } from "./ui/WalletButton";
 
 const links = [
   { href: "/rounds", label: "Rounds" },
@@ -47,9 +48,7 @@ export function Nav() {
           })}
         </div>
 
-        <button className="hidden rounded-full border border-border bg-surface px-4 py-2 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40 hover:bg-surface-elevated md:block">
-          Connect Wallet
-        </button>
+        <WalletButton className="hidden md:block" />
 
         <button
           aria-label={open ? "Close menu" : "Open menu"}
@@ -87,12 +86,7 @@ export function Nav() {
                   </Link>
                 );
               })}
-              <button
-                onClick={() => setOpen(false)}
-                className="mt-2 rounded-full border border-border bg-surface px-4 py-3 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40"
-              >
-                Connect Wallet
-              </button>
+              <WalletButton className="mt-2" />
             </div>
           </motion.div>
         )}

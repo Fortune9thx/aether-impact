@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
-import { Dimension } from "@/lib/types";
+import { DraftDimension } from "@/lib/types";
 
 export function DimensionRow({
   dimension,
@@ -9,8 +9,8 @@ export function DimensionRow({
   onRemove,
   removable,
 }: {
-  dimension: Dimension;
-  onChange: (dimension: Dimension) => void;
+  dimension: DraftDimension;
+  onChange: (dimension: DraftDimension) => void;
   onRemove: () => void;
   removable: boolean;
 }) {

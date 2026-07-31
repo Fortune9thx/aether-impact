@@ -1,22 +1,98 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft } from "lucide-react";
-import { mockEvaluations, mockProjects, mockRounds } from "@/lib/mock-data";
+import { AlertTriangle, ArrowLeft, Sparkles } from "lucide-react";
+import { Evaluation, Project, Round } from "@/lib/types";
+import { isContractConfigured, readContract, writeContract } from "@/lib/genlayer";
+import { useWallet } from "@/components/providers/WalletProvider";
+import { useContractRead } from "@/lib/use-contract-read";
 import { ScoreReveal } from "@/components/evaluation/ScoreReveal";
 import { DimensionScoreRow } from "@/components/evaluation/DimensionScoreRow";
 import { CitedEvidenceList } from "@/components/evaluation/CitedEvidenceList";
+import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
+import { WalletButton } from "@/components/ui/WalletButton";
 
-export default async function EvaluationPage({
+export default function EvaluationPage({
   params,
 }: {
   params: Promise<{ id: string; projectId: string }>;
 }) {
-  const { id, projectId } = await params;
-  const round = mockRounds.find((r) => r.id === id);
-  const project = mockProjects.find((p) => p.id === projectId);
-  const evaluation = mockEvaluations.find((e) => e.projectId === projectId);
+  const { id, projectId } = use(params);
+  const { address } = useWallet();
 
-  if (!round || !project || !evaluation) notFound();
+  const { data: round, loading: roundLoading, error: roundError } =
+    useContractRead<Round>("get_round", [id], [id]);
+  const { data: project, loading: projectLoading, error: projectError } =
+    useContractRead<Project>("get_project", [projectId], [projectId]);
+
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [evaluationLoading, setEvaluationLoading] = useState(true);
+  const [evaluationMissing, setEvaluationMissing] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  const fetchEvaluation = useCallback(async () => {
+    if (!isContractConfigured()) {
+      setEvaluationLoading(false);
+      return;
+    }
+    setEvaluationLoading(true);
+    setEvaluationMissing(false);
+    try {
+      const raw = await readContract<string>("get_evaluation", [projectId]);
+      setEvaluation(typeof raw === "string" ? JSON.parse(raw) : raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      if (message.toLowerCase().includes("no evaluation found")) {
+        setEvaluationMissing(true);
+      } else {
+        setRunError(message || "Failed to load evaluation");
+      }
+    } finally {
+      setEvaluationLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchEvaluation();
+  }, [fetchEvaluation]);
+
+  async function handleTriggerEvaluation() {
+    setRunError(null);
+
+    if (!address) {
+      setRunError("Connect your wallet to trigger an evaluation.");
+      return;
+    }
+
+    setRunning(true);
+    try {
+      await writeContract(address, window.ethereum, "evaluate_project", [
+        projectId,
+      ]);
+      await fetchEvaluation();
+    } catch (err) {
+      setRunError(
+        err instanceof Error ? err.message : "Evaluation failed to run",
+      );
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  if (roundLoading || projectLoading) return <LoadingState label="Loading project..." />;
+
+  const loadError = roundError || projectError;
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-20">
+        <ErrorState message={loadError} />
+      </div>
+    );
+  }
+
+  if (!round || !project) return null;
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-20">
@@ -37,62 +113,107 @@ export default async function EvaluationPage({
         </p>
       </div>
 
-      {evaluation.challenged && (
-        <div className="mt-6 flex items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger w-fit">
+      {evaluation?.challenged && (
+        <div className="mt-6 flex w-fit items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
           <AlertTriangle className="h-3.5 w-3.5" />
           Re-evaluated after challenge
         </div>
       )}
 
-      <div className="mt-14 flex items-center justify-center gap-16 rounded-2xl border border-border bg-surface py-14">
-        <ScoreReveal score={evaluation.overallScore} label="Overall Score" size="lg" />
-        <div className="h-16 w-px bg-border" />
-        <ScoreReveal score={evaluation.confidence} label="Confidence" size="sm" />
-      </div>
+      {evaluationLoading && <LoadingState label="Checking evaluation status..." />}
 
-      <div className="mt-14">
-        <h2 className="font-serif text-2xl text-text-primary">Reasoning</h2>
-        <p className="mt-4 font-serif text-lg leading-[1.8] text-text-primary/90">
-          {evaluation.reasoning}
-        </p>
-      </div>
+      {!evaluationLoading && evaluationMissing && (
+        <div className="mt-14 flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface py-16 text-center">
+          <Sparkles className="h-6 w-6 text-accent" />
+          <div>
+            <h2 className="font-serif text-2xl text-text-primary">
+              Not evaluated yet
+            </h2>
+            <p className="mt-2 max-w-sm text-sm text-text-secondary">
+              Trigger the Intelligent Contract to score this submission
+              against the round&apos;s weighted dimensions.
+            </p>
+          </div>
 
-      <div className="mt-14">
-        <h2 className="font-serif text-2xl text-text-primary">
-          Dimension Breakdown
-        </h2>
-        <div className="mt-4">
-          {evaluation.dimensionScores.map((dimension, index) => (
-            <DimensionScoreRow
-              key={dimension.dimensionId}
-              dimension={dimension}
-              index={index}
-            />
-          ))}
+          {!address ? (
+            <WalletButton />
+          ) : (
+            <button
+              onClick={handleTriggerEvaluation}
+              disabled={running}
+              className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+            >
+              {running ? "Evaluating (this can take a moment)..." : "Trigger Evaluation"}
+            </button>
+          )}
+
+          {runError && (
+            <div className="w-full max-w-md px-6">
+              <ErrorState message={runError} />
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
-      <div className="mt-14">
-        <h2 className="font-serif text-2xl text-text-primary">
-          Cited Evidence
-        </h2>
-        <div className="mt-4">
-          <CitedEvidenceList urls={evaluation.citedEvidence} />
+      {!evaluationLoading && runError && !evaluationMissing && (
+        <div className="mt-8">
+          <ErrorState message={runError} />
         </div>
-      </div>
+      )}
 
-      <div className="mt-16 flex items-center justify-between border-t border-border pt-8">
-        <p className="max-w-sm text-sm text-text-secondary">
-          Disagree with this evaluation? Submit a challenge with new
-          supporting evidence.
-        </p>
-        <Link
-          href={`/rounds/${round.id}/projects/${project.id}/challenge`}
-          className="shrink-0 rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-danger/40"
-        >
-          Challenge Evaluation
-        </Link>
-      </div>
+      {!evaluationLoading && evaluation && (
+        <>
+          <div className="mt-14 flex items-center justify-center gap-16 rounded-2xl border border-border bg-surface py-14">
+            <ScoreReveal score={evaluation.overall_score} label="Overall Score" size="lg" />
+            <div className="h-16 w-px bg-border" />
+            <ScoreReveal score={evaluation.confidence} label="Confidence" size="sm" />
+          </div>
+
+          <div className="mt-14">
+            <h2 className="font-serif text-2xl text-text-primary">Reasoning</h2>
+            <p className="mt-4 font-serif text-lg leading-[1.8] text-text-primary/90">
+              {evaluation.reasoning}
+            </p>
+          </div>
+
+          <div className="mt-14">
+            <h2 className="font-serif text-2xl text-text-primary">
+              Dimension Breakdown
+            </h2>
+            <div className="mt-4">
+              {evaluation.dimension_scores.map((dimension, index) => (
+                <DimensionScoreRow
+                  key={dimension.label}
+                  dimension={dimension}
+                  index={index}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-14">
+            <h2 className="font-serif text-2xl text-text-primary">
+              Cited Evidence
+            </h2>
+            <div className="mt-4">
+              <CitedEvidenceList urls={evaluation.cited_evidence} />
+            </div>
+          </div>
+
+          <div className="mt-16 flex items-center justify-between border-t border-border pt-8">
+            <p className="max-w-sm text-sm text-text-secondary">
+              Disagree with this evaluation? Submit a challenge with new
+              supporting evidence.
+            </p>
+            <Link
+              href={`/rounds/${round.id}/projects/${project.id}/challenge`}
+              className="shrink-0 rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-danger/40"
+            >
+              Challenge Evaluation
+            </Link>
+          </div>
+        </>
+      )}
     </div>
   );
 }

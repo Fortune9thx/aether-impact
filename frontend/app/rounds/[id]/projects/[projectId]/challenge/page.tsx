@@ -4,16 +4,19 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowLeft, Plus } from "lucide-react";
-import { mockEvaluations, mockProjects, mockRounds } from "@/lib/mock-data";
-import { EvidenceLink } from "@/lib/types";
+import { DraftEvidenceLink, Evaluation, Project } from "@/lib/types";
+import { writeContract } from "@/lib/genlayer";
+import { useContractRead } from "@/lib/use-contract-read";
+import { useWallet } from "@/components/providers/WalletProvider";
 import { EvidenceRow } from "@/components/round/EvidenceRow";
 import { FormSection } from "@/components/ui/FormSection";
-import { notFound } from "next/navigation";
+import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
+import { WalletButton } from "@/components/ui/WalletButton";
 
 let evidenceCounter = 0;
-function newEvidence(): EvidenceLink {
+function newEvidence(): DraftEvidenceLink {
   evidenceCounter += 1;
-  return { id: `challenge-${evidenceCounter}`, label: "", url: "" };
+  return { key: `challenge-${evidenceCounter}`, label: "", url: "" };
 }
 
 export default function ChallengePage({
@@ -23,17 +26,18 @@ export default function ChallengePage({
 }) {
   const { id, projectId } = use(params);
   const router = useRouter();
+  const { address } = useWallet();
 
-  const round = mockRounds.find((r) => r.id === id);
-  const project = mockProjects.find((p) => p.id === projectId);
-  const evaluation = mockEvaluations.find((e) => e.projectId === projectId);
+  const { data: project, loading: projectLoading, error: projectError } =
+    useContractRead<Project>("get_project", [projectId], [projectId]);
+  const { data: evaluation, loading: evaluationLoading, error: evaluationError } =
+    useContractRead<Evaluation>("get_evaluation", [projectId], [projectId]);
 
-  if (!round || !project || !evaluation) notFound();
+  const [evidence, setEvidence] = useState<DraftEvidenceLink[]>([newEvidence()]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [reason, setReason] = useState("");
-  const [evidence, setEvidence] = useState<EvidenceLink[]>([newEvidence()]);
-
-  function updateEvidence(index: number, item: EvidenceLink) {
+  function updateEvidence(index: number, item: DraftEvidenceLink) {
     setEvidence((prev) => prev.map((e, i) => (i === index ? item : e)));
   }
 
@@ -41,10 +45,45 @@ export default function ChallengePage({
     setEvidence((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    router.push(`/rounds/${round.id}/projects/${project.id}`);
+    setError(null);
+
+    if (!address) {
+      setError("Connect your wallet to submit a challenge.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const evidencePayload = evidence.map(({ label, url }) => ({ label, url }));
+
+      await writeContract(address, window.ethereum, "challenge_evaluation", [
+        projectId,
+        JSON.stringify(evidencePayload),
+      ]);
+
+      router.push(`/rounds/${id}/projects/${projectId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit challenge");
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  if (projectLoading || evaluationLoading)
+    return <LoadingState label="Loading evaluation..." />;
+
+  const loadError = projectError || evaluationError;
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-20">
+        <ErrorState message={loadError} />
+      </div>
+    );
+  }
+
+  if (!project || !evaluation) return null;
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-20">
@@ -76,7 +115,7 @@ export default function ChallengePage({
         <div className="flex items-center justify-between text-sm">
           <span className="text-text-secondary">Current overall score</span>
           <span className="font-mono text-text-primary">
-            {evaluation.overallScore}/100
+            {evaluation.overall_score}/100
           </span>
         </div>
         <div className="mt-3 flex items-center justify-between text-sm">
@@ -87,6 +126,15 @@ export default function ChallengePage({
         </div>
       </div>
 
+      {!address && (
+        <div className="mt-8 flex items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4">
+          <p className="text-sm text-text-secondary">
+            You need a connected wallet to submit a challenge.
+          </p>
+          <WalletButton />
+        </div>
+      )}
+
       <motion.form
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -95,27 +143,13 @@ export default function ChallengePage({
         className="mt-10 flex flex-col gap-10"
       >
         <FormSection
-          label="Reason for challenge"
-          hint="Explain what the evaluation missed or got wrong."
-        >
-          <textarea
-            required
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={4}
-            placeholder="e.g. The evaluation understated adoption — it didn't account for our private enterprise integrations."
-            className="resize-none rounded-xl border border-border bg-surface px-4 py-3 text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
-          />
-        </FormSection>
-
-        <FormSection
           label="New evidence"
-          hint="Links that support your challenge and were not part of the original submission."
+          hint="Links that support your challenge and were not part of the original submission. Must be http(s) URLs."
         >
           <div className="flex flex-col gap-3">
             {evidence.map((item, index) => (
               <EvidenceRow
-                key={item.id}
+                key={item.key}
                 evidence={item}
                 onChange={(e) => updateEvidence(index, e)}
                 onRemove={() => removeEvidence(index)}
@@ -134,16 +168,19 @@ export default function ChallengePage({
           </button>
         </FormSection>
 
+        {error && <ErrorState message={error} />}
+
         <div className="flex items-center gap-4 border-t border-border pt-8">
           <button
             type="submit"
-            className="rounded-full bg-danger px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90"
+            disabled={submitting}
+            className="rounded-full bg-danger px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Submit Challenge
+            {submitting ? "Re-evaluating..." : "Submit Challenge"}
           </button>
           <button
             type="button"
-            onClick={() => router.push(`/rounds/${round.id}/projects/${project.id}`)}
+            onClick={() => router.push(`/rounds/${id}/projects/${projectId}`)}
             className="text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
           >
             Cancel

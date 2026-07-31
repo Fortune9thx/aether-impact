@@ -1,10 +1,13 @@
+// These types mirror the JSON records produced by contracts/ImpactEvaluator.py
+// exactly (snake_case, same field names) so there is no transformation layer
+// between what the contract stores and what the frontend reads.
+
+export type RoundStatus = "open" | "closed";
+
 export type Dimension = {
-  id: string;
   label: string;
   weight: number;
 };
-
-export type RoundStatus = "draft" | "open" | "evaluating" | "closed";
 
 export type Round = {
   id: string;
@@ -13,27 +16,25 @@ export type Round = {
   criteria: string;
   dimensions: Dimension[];
   status: RoundStatus;
-  submissionCount: number;
-  createdAt: string;
+  created_at: string;
 };
 
 export type EvidenceLink = {
-  id: string;
-  url: string;
   label: string;
+  url: string;
 };
 
 export type Project = {
   id: string;
-  roundId: string;
+  round_id: string;
   name: string;
   description: string;
-  claimedImpact: string;
+  claimed_impact: string;
   evidence: EvidenceLink[];
+  submitted_at: string;
 };
 
 export type DimensionScore = {
-  dimensionId: string;
   label: string;
   score: number;
   reasoning: string;
@@ -41,11 +42,17 @@ export type DimensionScore = {
 
 export type Evaluation = {
   id: string;
-  projectId: string;
-  overallScore: number;
+  project_id: string;
+  overall_score: number;
   confidence: number;
-  dimensionScores: DimensionScore[];
+  dimension_scores: DimensionScore[];
   reasoning: string;
-  citedEvidence: string[];
+  cited_evidence: string[];
   challenged: boolean;
 };
+
+// Client-only shape used while a dimension/evidence row is being edited in a
+// form, before it's serialized into the contract's JSON args. `key` is a
+// React list key only -- it is never sent to the contract.
+export type DraftDimension = Dimension & { key: string };
+export type DraftEvidenceLink = EvidenceLink & { key: string };

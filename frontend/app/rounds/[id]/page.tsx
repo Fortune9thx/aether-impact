@@ -1,27 +1,46 @@
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { mockRounds } from "@/lib/mock-data";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+"use client";
 
-export default async function RoundDetailPage({
+import { use } from "react";
+import Link from "next/link";
+import { Project, Round } from "@/lib/types";
+import { useContractRead } from "@/lib/use-contract-read";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
+
+export default function RoundDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const round = mockRounds.find((r) => r.id === id);
-  if (!round) notFound();
+  const { id } = use(params);
+
+  const { data: round, loading: roundLoading, error: roundError } =
+    useContractRead<Round>("get_round", [id], [id]);
+  const { data: projects, loading: projectsLoading } = useContractRead<
+    Project[]
+  >("list_projects", [id], [id]);
+
+  if (roundLoading) return <LoadingState label="Loading round..." />;
+  if (roundError)
+    return (
+      <div className="mx-auto max-w-3xl px-6 py-20">
+        <ErrorState message={roundError} />
+      </div>
+    );
+  if (!round) return null;
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-20">
       <div className="flex items-center justify-between">
         <StatusBadge status={round.status} />
-        <Link
-          href={`/submit?round=${round.id}`}
-          className="rounded-full border border-border px-5 py-2 text-sm text-text-primary transition-colors duration-450 hover:border-accent/40"
-        >
-          Submit a Project
-        </Link>
+        {round.status === "open" && (
+          <Link
+            href={`/submit?round=${round.id}`}
+            className="rounded-full border border-border px-5 py-2 text-sm text-text-primary transition-colors duration-450 hover:border-accent/40"
+          >
+            Submit a Project
+          </Link>
+        )}
       </div>
 
       <h1 className="mt-6 font-serif text-4xl leading-tight text-text-primary">
@@ -46,7 +65,7 @@ export default async function RoundDetailPage({
         </h2>
         <div className="mt-5 flex flex-col gap-4">
           {round.dimensions.map((dimension) => (
-            <div key={dimension.id} className="flex items-center gap-4">
+            <div key={dimension.label} className="flex items-center gap-4">
               <span className="w-40 shrink-0 text-sm text-text-primary">
                 {dimension.label}
               </span>
@@ -65,8 +84,12 @@ export default async function RoundDetailPage({
       </div>
 
       <div className="mt-12 flex items-center justify-between border-t border-border pt-8 text-sm text-text-secondary">
-        <span>{round.submissionCount} submissions so far</span>
-        <span className="font-mono">opened {round.createdAt}</span>
+        <span>
+          {projectsLoading
+            ? "loading submissions..."
+            : `${projects?.length ?? 0} submissions so far`}
+        </span>
+        <span className="font-mono">opened {round.created_at}</span>
       </div>
 
       <Link

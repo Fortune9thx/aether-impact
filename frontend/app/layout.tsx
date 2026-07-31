@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Newsreader, Inter, JetBrains_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { PageTransition } from "@/components/motion/PageTransition";
+import { WalletProvider } from "@/components/providers/WalletProvider";
+import { ContractStatusBanner } from "@/components/ui/ContractStatusBanner";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -37,10 +39,13 @@ export default function RootLayout({
       className={`${newsreader.variable} ${inter.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="flex min-h-full flex-col bg-background text-text-primary antialiased">
-        <Nav />
-        <main className="flex-1">
-          <PageTransition>{children}</PageTransition>
-        </main>
+        <WalletProvider>
+          <ContractStatusBanner />
+          <Nav />
+          <main className="flex-1">
+            <PageTransition>{children}</PageTransition>
+          </main>
+        </WalletProvider>
       </body>
     </html>
   );

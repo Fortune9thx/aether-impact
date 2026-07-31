@@ -6,7 +6,13 @@ import { ArrowUpRight } from "lucide-react";
 import { Round } from "@/lib/types";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
-export function RoundCard({ round }: { round: Round }) {
+export function RoundCard({
+  round,
+  submissionCount,
+}: {
+  round: Round;
+  submissionCount: number | null;
+}) {
   return (
     <motion.div
       variants={{
@@ -34,7 +40,9 @@ export function RoundCard({ round }: { round: Round }) {
         </div>
 
         <div className="flex items-center justify-between border-t border-border pt-4 font-mono text-xs text-text-secondary">
-          <span>{round.submissionCount} submissions</span>
+          <span>
+            {submissionCount === null ? "..." : submissionCount} submissions
+          </span>
           <span>{round.dimensions.length} dimensions</span>
         </div>
       </Link>

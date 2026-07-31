@@ -1,7 +1,7 @@
 "use client";
 
 import { Trash2, Link2 } from "lucide-react";
-import { EvidenceLink } from "@/lib/types";
+import { DraftEvidenceLink } from "@/lib/types";
 
 export function EvidenceRow({
   evidence,
@@ -9,8 +9,8 @@ export function EvidenceRow({
   onRemove,
   removable,
 }: {
-  evidence: EvidenceLink;
-  onChange: (evidence: EvidenceLink) => void;
+  evidence: DraftEvidenceLink;
+  onChange: (evidence: DraftEvidenceLink) => void;
   onRemove: () => void;
   removable: boolean;
 }) {

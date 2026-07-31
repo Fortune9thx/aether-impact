@@ -1,12 +1,46 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { mockRounds } from "@/lib/mock-data";
+import { Round } from "@/lib/types";
+import { readContract } from "@/lib/genlayer";
+import { useContractRead } from "@/lib/use-contract-read";
 import { RoundCard } from "@/components/round/RoundCard";
+import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 
 export default function RoundsPage() {
+  const { data: rounds, loading, error } = useContractRead<Round[]>(
+    "list_rounds",
+    [],
+  );
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!rounds) return;
+
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        rounds.map(async (round) => {
+          try {
+            const raw = await readContract<string>("list_projects", [round.id]);
+            const projects = typeof raw === "string" ? JSON.parse(raw) : raw;
+            return [round.id, Array.isArray(projects) ? projects.length : 0] as const;
+          } catch {
+            return [round.id, 0] as const;
+          }
+        }),
+      );
+      if (!cancelled) setCounts(Object.fromEntries(entries));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [rounds]);
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-20">
       <div className="mb-14 flex items-end justify-between gap-6">
@@ -27,16 +61,31 @@ export default function RoundsPage() {
         </Link>
       </div>
 
-      <motion.div
-        initial="hidden"
-        animate="show"
-        variants={{ show: { transition: { staggerChildren: 0.08 } } }}
-        className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
-      >
-        {mockRounds.map((round) => (
-          <RoundCard key={round.id} round={round} />
-        ))}
-      </motion.div>
+      {loading && <LoadingState label="Loading rounds..." />}
+      {error && <ErrorState message={error} />}
+
+      {rounds && rounds.length === 0 && (
+        <p className="text-text-secondary">
+          No rounds yet. Create the first one.
+        </p>
+      )}
+
+      {rounds && rounds.length > 0 && (
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{ show: { transition: { staggerChildren: 0.08 } } }}
+          className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {rounds.map((round) => (
+            <RoundCard
+              key={round.id}
+              round={round}
+              submissionCount={counts[round.id] ?? null}
+            />
+          ))}
+        </motion.div>
+      )}
     </div>
   );
 }

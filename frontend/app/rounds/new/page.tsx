@@ -4,29 +4,36 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { Dimension } from "@/lib/types";
+import { DraftDimension } from "@/lib/types";
+import { writeContract } from "@/lib/genlayer";
+import { useWallet } from "@/components/providers/WalletProvider";
 import { DimensionRow } from "@/components/round/DimensionRow";
 import { FormSection } from "@/components/ui/FormSection";
+import { ErrorState } from "@/components/ui/AsyncState";
+import { WalletButton } from "@/components/ui/WalletButton";
 
 let dimensionCounter = 0;
-function newDimension(): Dimension {
+function newDimension(): DraftDimension {
   dimensionCounter += 1;
-  return { id: `new-${dimensionCounter}`, label: "", weight: 25 };
+  return { key: `new-${dimensionCounter}`, label: "", weight: 25 };
 }
 
 export default function NewRoundPage() {
   const router = useRouter();
+  const { address } = useWallet();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [criteria, setCriteria] = useState("");
-  const [dimensions, setDimensions] = useState<Dimension[]>([
+  const [dimensions, setDimensions] = useState<DraftDimension[]>([
     newDimension(),
     newDimension(),
   ]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const totalWeight = dimensions.reduce((sum, d) => sum + d.weight, 0);
 
-  function updateDimension(index: number, dimension: Dimension) {
+  function updateDimension(index: number, dimension: DraftDimension) {
     setDimensions((prev) =>
       prev.map((d, i) => (i === index ? dimension : d)),
     );
@@ -36,9 +43,36 @@ export default function NewRoundPage() {
     setDimensions((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    router.push("/rounds");
+    setError(null);
+
+    if (!address) {
+      setError("Connect your wallet before creating a round.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const dimensionsPayload = dimensions.map(({ label, weight }) => ({
+        label,
+        weight,
+      }));
+
+      const hash = await writeContract(
+        address,
+        window.ethereum,
+        "create_round",
+        [title, description, criteria, JSON.stringify(dimensionsPayload)],
+      );
+
+      void hash;
+      router.push("/rounds");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create round");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -54,6 +88,15 @@ export default function NewRoundPage() {
           Intelligent Contract will use these to evaluate every submission.
         </p>
       </motion.div>
+
+      {!address && (
+        <div className="mt-8 flex items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4">
+          <p className="text-sm text-text-secondary">
+            You need a connected wallet to create a round on-chain.
+          </p>
+          <WalletButton />
+        </div>
+      )}
 
       <motion.form
         initial={{ opacity: 0, y: 12 }}
@@ -99,12 +142,12 @@ export default function NewRoundPage() {
 
         <FormSection
           label="Weighted dimensions"
-          hint="Break the criteria into scored dimensions. Weights should total 100%."
+          hint="Break the criteria into scored dimensions. Weights must total exactly 100%."
         >
           <div className="flex flex-col gap-3">
             {dimensions.map((dimension, index) => (
               <DimensionRow
-                key={dimension.id}
+                key={dimension.key}
                 dimension={dimension}
                 onChange={(d) => updateDimension(index, d)}
                 onRemove={() => removeDimension(index)}
@@ -133,13 +176,15 @@ export default function NewRoundPage() {
           </div>
         </FormSection>
 
+        {error && <ErrorState message={error} />}
+
         <div className="flex items-center gap-4 border-t border-border pt-8">
           <button
             type="submit"
-            disabled={totalWeight !== 100}
+            disabled={totalWeight !== 100 || submitting}
             className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
           >
-            Create Round
+            {submitting ? "Creating..." : "Create Round"}
           </button>
           <button
             type="button"

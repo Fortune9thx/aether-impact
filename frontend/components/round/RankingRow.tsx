@@ -56,7 +56,7 @@ export function RankingRow({
         </div>
 
         <span className="font-serif text-2xl text-accent sm:text-3xl">
-          {evaluation.overallScore}
+          {evaluation.overall_score}
         </span>
       </Link>
     </motion.div>
