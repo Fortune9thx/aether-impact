@@ -130,12 +130,49 @@ export async function readContract<T = unknown>(
   }
 }
 
+// Lightweight, best-effort status narration for the two appeal states --
+// genlayer-js's waitForTransactionReceipt blocks until a decided terminal
+// state with no visibility into what's happening in between, so this polls
+// getTransaction in parallel purely to surface "Appeal in progress..." to
+// the caller instead of a generic spinner. Never throws; a failure here
+// just means the caller doesn't get an appeal notice, the main wait is
+// unaffected.
+function watchForAppeal(
+  client: ReturnType<typeof createClient>,
+  hash: string,
+  onStatus?: (status: string) => void,
+): () => void {
+  if (!onStatus) return () => {};
+
+  let stopped = false;
+  const interval = setInterval(() => {
+    client
+      .getTransaction({ hash: hash as never })
+      .then((tx) => {
+        if (stopped) return;
+        const statusName = (tx as Record<string, unknown>).status_name as string | undefined;
+        if (statusName === "APPEAL_REVEALING" || statusName === "APPEAL_COMMITTING") {
+          onStatus("Appeal in progress...");
+        }
+      })
+      .catch(() => {
+        // best-effort only
+      });
+  }, 2000);
+
+  return () => {
+    stopped = true;
+    clearInterval(interval);
+  };
+}
+
 export async function writeContract(
   account: `0x${string}`,
   provider: unknown,
   functionName: string,
   args: unknown[] = [],
   value: bigint = BigInt(0),
+  onStatus?: (status: string) => void,
 ): Promise<string> {
   const address = requireContractAddress();
   const client = createClient({
@@ -144,6 +181,7 @@ export async function writeContract(
     provider: provider as never,
   });
 
+  let stopWatching = () => {};
   try {
     const hash = await client.writeContract({
       address,
@@ -151,6 +189,8 @@ export async function writeContract(
       args: args as never,
       value,
     });
+
+    stopWatching = watchForAppeal(client, hash, onStatus);
 
     const receipt = await client.waitForTransactionReceipt({
       hash,
@@ -201,5 +241,7 @@ export async function writeContract(
     return hash as string;
   } catch (err) {
     throw cleanContractError(err);
+  } finally {
+    stopWatching();
   }
 }

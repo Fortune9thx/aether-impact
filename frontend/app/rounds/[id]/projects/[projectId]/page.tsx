@@ -7,12 +7,14 @@ import { Evaluation, isRoundAdmin, Project, Round } from "@/lib/types";
 import { isContractConfigured, readContract, writeContract } from "@/lib/genlayer";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { useContractRead } from "@/lib/use-contract-read";
-import { ScoreReveal } from "@/components/evaluation/ScoreReveal";
+import { ScoreHero } from "@/components/evaluation/ScoreHero";
 import { DimensionScoreRow } from "@/components/evaluation/DimensionScoreRow";
 import { CitedEvidenceList } from "@/components/evaluation/CitedEvidenceList";
+import { SubmittedEvidenceList } from "@/components/evaluation/SubmittedEvidenceList";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 import { WalletButton } from "@/components/ui/WalletButton";
-import { formatGen } from "@/lib/format";
+import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
+import { formatGen, formatDate } from "@/lib/format";
 
 export default function EvaluationPage({
   params,
@@ -34,6 +36,7 @@ export default function EvaluationPage({
   const [evaluationMissing, setEvaluationMissing] = useState(false);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<string | null>(null);
 
   const fetchEvaluation = useCallback(async () => {
     if (!isContractConfigured()) {
@@ -73,10 +76,16 @@ export default function EvaluationPage({
     }
 
     setRunning(true);
+    setRunStatus(null);
     try {
-      await writeContract(address, provider, "evaluate_project", [
-        projectId,
-      ]);
+      await writeContract(
+        address,
+        provider,
+        "evaluate_project",
+        [projectId],
+        BigInt(0),
+        setRunStatus,
+      );
       await fetchEvaluation();
     } catch (err) {
       setRunError(
@@ -84,6 +93,7 @@ export default function EvaluationPage({
       );
     } finally {
       setRunning(false);
+      setRunStatus(null);
     }
   }
 
@@ -92,7 +102,7 @@ export default function EvaluationPage({
   const loadError = roundError || projectError;
   if (loadError) {
     return (
-      <div className="mx-auto max-w-3xl px-6 py-20">
+      <div className="mx-auto max-w-2xl px-6 py-20">
         <ErrorState message={loadError} />
       </div>
     );
@@ -100,8 +110,10 @@ export default function EvaluationPage({
 
   if (!round || !project) return null;
 
+  const weightByLabel = new Map(round.dimensions.map((d) => [d.label, d.weight]));
+
   return (
-    <div className="mx-auto max-w-3xl px-6 py-20">
+    <div className="mx-auto max-w-2xl px-6 pb-32 pt-16 sm:pt-20">
       <Link
         href={`/rounds/${round.id}`}
         className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
@@ -110,26 +122,39 @@ export default function EvaluationPage({
         {round.title}
       </Link>
 
-      <div className="mt-6">
-        <h1 className="font-serif text-4xl leading-tight text-text-primary">
+      {/* Project header */}
+      <div className="mt-10">
+        <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">
+          Evaluation
+        </span>
+        <h1 className="mt-3 font-serif text-4xl leading-[1.1] text-text-primary sm:text-5xl">
           {project.name}
         </h1>
-        <p className="mt-3 max-w-2xl text-text-secondary">
+        <p className="mt-4 text-sm text-text-secondary">
+          {round.title} &middot; {formatDate(project.submitted_at)} &middot;{" "}
+          {round.status === "open" ? "Open" : "Closed"}
+        </p>
+        <p className="mt-6 max-w-[65ch] text-text-secondary">
           {project.description}
         </p>
       </div>
 
       {evaluation?.challenged && (
-        <div className="mt-6 flex w-fit items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
+        <div className="mt-8 flex w-fit items-center gap-2 rounded-full border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
           <AlertTriangle className="h-3.5 w-3.5" />
           Re-evaluated after challenge
+          {evaluation.challenged_by && (
+            <span className="font-mono text-xs text-danger/80">
+              by {evaluation.challenged_by.slice(0, 6)}...{evaluation.challenged_by.slice(-4)}
+            </span>
+          )}
         </div>
       )}
 
       {evaluationLoading && <LoadingState label="Checking evaluation status..." />}
 
       {!evaluationLoading && evaluationMissing && (
-        <div className="mt-14 flex flex-col items-center gap-5 rounded-2xl border border-border bg-surface py-16 text-center">
+        <div className="mt-16 flex flex-col items-center gap-5 py-20 text-center">
           <Sparkles className="h-6 w-6 text-accent" />
           <div>
             <h2 className="font-serif text-2xl text-text-primary">
@@ -149,7 +174,9 @@ export default function EvaluationPage({
               disabled={running}
               className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
             >
-              {running ? "Evaluating (this can take a moment)..." : "Trigger Evaluation"}
+              {running
+                ? runStatus ?? "Evaluating (this can take a moment)..."
+                : "Trigger Evaluation"}
             </button>
           )}
 
@@ -169,45 +196,63 @@ export default function EvaluationPage({
 
       {!evaluationLoading && evaluation && (
         <>
-          <div className="mt-14 flex items-center justify-center gap-16 rounded-2xl border border-border bg-surface py-14">
-            <ScoreReveal score={evaluation.overall_score} label="Overall Score" size="lg" />
-            <div className="h-16 w-px bg-border" />
-            <ScoreReveal score={evaluation.confidence} label="Confidence" size="sm" />
-          </div>
+          {/* Score hero */}
+          <ScoreHero score={evaluation.overall_score} confidence={evaluation.confidence} />
 
-          <div className="mt-14">
-            <h2 className="font-serif text-2xl text-text-primary">Reasoning</h2>
-            <p className="mt-4 font-serif text-lg leading-[1.8] text-text-primary/90">
-              {evaluation.reasoning}
-            </p>
-          </div>
-
-          <div className="mt-14">
+          {/* Dimension scores */}
+          <div className="mt-8">
             <h2 className="font-serif text-2xl text-text-primary">
               Dimension Breakdown
             </h2>
-            <div className="mt-4">
+            <div className="mt-2">
               {evaluation.dimension_scores.map((dimension, index) => (
                 <DimensionScoreRow
                   key={dimension.label}
                   dimension={dimension}
+                  weight={weightByLabel.get(dimension.label)}
                   index={index}
                 />
               ))}
             </div>
           </div>
 
-          <div className="mt-14">
+          {/* Reasoning -- the most important content on the page */}
+          <div className="mt-20">
+            <h2 className="font-serif text-2xl text-text-primary">Reasoning</h2>
+            <p className="mt-5 max-w-[68ch] font-serif text-lg leading-[1.85] text-text-primary/90">
+              {evaluation.reasoning}
+            </p>
+          </div>
+
+          {/* Cited evidence */}
+          <div className="mt-20">
             <h2 className="font-serif text-2xl text-text-primary">
               Cited Evidence
             </h2>
-            <div className="mt-4">
+            <p className="mt-1 text-xs text-text-secondary">
+              The links the Intelligent Contract cited in its reasoning above.
+            </p>
+            <div className="mt-5">
               <CitedEvidenceList urls={evaluation.cited_evidence} />
             </div>
           </div>
 
+          {/* Full submitted evidence, with attribution */}
+          <div className="mt-16">
+            <h2 className="font-serif text-xl text-text-primary">
+              Submitted Evidence
+            </h2>
+            <p className="mt-1 text-xs text-text-secondary">
+              Every link attached to this project, including any added later
+              via a challenge, attributed to whoever submitted it.
+            </p>
+            <div className="mt-5">
+              <SubmittedEvidenceList evidence={project.evidence} submitter={project.submitter} />
+            </div>
+          </div>
+
           {round.distributed && Number(project.payout) > 0 && (
-            <div className="mt-14 flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-7">
+            <div className="mt-16 flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-7">
               <div>
                 <h2 className="font-serif text-lg text-text-primary">
                   Payout
@@ -216,9 +261,11 @@ export default function EvaluationPage({
                   {formatGen(project.payout)} GEN
                 </p>
                 <p className="mt-1 text-xs text-text-secondary">
-                  Payout settlement is handled off-chain by the
-                  round admin, who marks this entitlement as paid once
-                  settled.
+                  This entitlement is recorded on-chain. Actual GEN
+                  settlement is currently handled off-chain by the round
+                  admin, who marks it paid via <code>mark_paid</code> once
+                  sent, due to a known GenLayer Bradbury limitation on
+                  contract-initiated transfers.
                 </p>
               </div>
 
@@ -261,26 +308,22 @@ export default function EvaluationPage({
             </div>
           )}
 
-          <div className="mt-16 flex items-center justify-between border-t border-border pt-8">
+          {/* Actions */}
+          <div className="mt-20 flex items-center justify-between gap-4 border-t border-border pt-8">
             {round.distributed ? (
               <p className="text-sm text-text-secondary">
                 This round has distributed funds; evaluations can no longer be
                 challenged.
               </p>
             ) : (
-              <>
-                <p className="max-w-sm text-sm text-text-secondary">
-                  Disagree with this evaluation? Submit a challenge with new
-                  supporting evidence.
-                </p>
-                <Link
-                  href={`/rounds/${round.id}/projects/${project.id}/challenge`}
-                  className="shrink-0 rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-danger/40"
-                >
-                  Challenge Evaluation
-                </Link>
-              </>
+              <Link
+                href={`/rounds/${round.id}/projects/${project.id}/challenge`}
+                className="rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-danger/40"
+              >
+                Challenge Evaluation
+              </Link>
             )}
+            <CopyLinkButton />
           </div>
         </>
       )}

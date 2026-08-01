@@ -22,6 +22,7 @@ export function EvidenceRow({
         value={evidence.label}
         onChange={(e) => onChange({ ...evidence, label: e.target.value })}
         placeholder="Label (e.g. GitHub repo)"
+        maxLength={200}
         className="w-40 shrink-0 bg-transparent text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none"
       />
 
@@ -30,6 +31,7 @@ export function EvidenceRow({
         value={evidence.url}
         onChange={(e) => onChange({ ...evidence, url: e.target.value })}
         placeholder="https://..."
+        maxLength={500}
         className="flex-1 bg-transparent font-mono text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none"
       />
 

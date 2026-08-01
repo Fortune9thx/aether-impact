@@ -94,8 +94,8 @@ export default function RoundDetailPage({
         </div>
         <p className="mt-3 text-sm text-text-secondary">
           {round.distributed
-            ? "This round's distribution has been computed and recorded."
-            : "The round admin sets the pool amount when computing distribution, after the round is closed. Payouts are settled by the round admin."}
+            ? "This round's distribution has been computed and recorded on-chain. GEN settlement is handled off-chain by the round admin due to a known GenLayer Bradbury limitation."
+            : "The round admin sets the pool amount when computing distribution, after the round is closed. Entitlements are recorded on-chain; GEN settlement is currently handled off-chain by the round admin due to a known GenLayer Bradbury limitation."}
         </p>
       </div>
 

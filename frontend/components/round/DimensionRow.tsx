@@ -20,6 +20,7 @@ export function DimensionRow({
         value={dimension.label}
         onChange={(e) => onChange({ ...dimension, label: e.target.value })}
         placeholder="Dimension label"
+        maxLength={200}
         className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none"
       />
 

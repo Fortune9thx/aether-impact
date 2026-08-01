@@ -8,6 +8,7 @@ import { DraftDimension } from "@/lib/types";
 import { writeContract } from "@/lib/genlayer";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { DimensionRow } from "@/components/round/DimensionRow";
+import { DimensionWeightPreview } from "@/components/round/DimensionWeightPreview";
 import { FormSection } from "@/components/ui/FormSection";
 import { ErrorState } from "@/components/ui/AsyncState";
 import { WalletButton } from "@/components/ui/WalletButton";
@@ -103,27 +104,35 @@ export default function NewRoundPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         onSubmit={handleSubmit}
-        className="mt-12 flex flex-col gap-10"
+        className="mt-12 flex flex-col gap-14"
       >
         <FormSection label="Round title">
           <input
             required
+            maxLength={200}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Public Goods Round, Q3 2026"
             className="rounded-xl border border-border bg-surface px-4 py-3 text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
           />
+          <span className="mt-1 self-end font-mono text-xs text-text-secondary">
+            {title.length}/200
+          </span>
         </FormSection>
 
         <FormSection label="Description">
           <textarea
             required
+            maxLength={4000}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             placeholder="What is this round funding or recognizing?"
             className="resize-none rounded-xl border border-border bg-surface px-4 py-3 text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
           />
+          <span className="mt-1 self-end font-mono text-xs text-text-secondary">
+            {description.length}/4000
+          </span>
         </FormSection>
 
         <FormSection
@@ -132,19 +141,25 @@ export default function NewRoundPage() {
         >
           <textarea
             required
+            maxLength={4000}
             value={criteria}
             onChange={(e) => setCriteria(e.target.value)}
             rows={5}
             placeholder="Prioritize projects with verifiable on-chain usage, sustained maintenance, and evidence of downstream adoption..."
             className="resize-none rounded-xl border border-border bg-surface px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
           />
+          <span className="mt-1 self-end font-mono text-xs text-text-secondary">
+            {criteria.length}/4000
+          </span>
         </FormSection>
 
         <FormSection
           label="Weighted dimensions"
           hint="Break the criteria into scored dimensions. Weights must total exactly 100%."
         >
-          <div className="flex flex-col gap-3">
+          <DimensionWeightPreview dimensions={dimensions} />
+
+          <div className="mt-5 flex flex-col gap-3">
             {dimensions.map((dimension, index) => (
               <DimensionRow
                 key={dimension.key}
@@ -160,7 +175,8 @@ export default function NewRoundPage() {
             <button
               type="button"
               onClick={() => setDimensions((prev) => [...prev, newDimension()])}
-              className="flex items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
+              disabled={dimensions.length >= 20}
+              className="flex items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
             >
               <Plus className="h-4 w-4" />
               Add dimension

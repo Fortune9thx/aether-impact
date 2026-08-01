@@ -65,9 +65,29 @@ export default function RoundsPage() {
       {error && <ErrorState message={error} />}
 
       {rounds && rounds.length === 0 && (
-        <p className="text-text-secondary">
-          No rounds yet. Create the first one.
-        </p>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center gap-6 py-28 text-center"
+        >
+          <h2 className="font-serif text-3xl text-text-primary">
+            No rounds yet
+          </h2>
+          <p className="max-w-sm text-text-secondary">
+            Every evaluation starts with a round: its criteria, its weighted
+            dimensions, and the standard every submission is judged against.
+          </p>
+          <Link
+            href="/rounds/new"
+            className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90"
+          >
+            Create the first round
+          </Link>
+          <p className="text-xs text-text-secondary">
+            Takes about a minute. You can add more admins later.
+          </p>
+        </motion.div>
       )}
 
       {rounds && rounds.length > 0 && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
@@ -114,9 +115,26 @@ function SubmitForm() {
       )}
 
       {rounds && openRounds.length === 0 && (
-        <p className="mt-8 text-text-secondary">
-          No rounds are currently open for submissions.
-        </p>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center gap-6 py-24 text-center"
+        >
+          <h2 className="font-serif text-2xl text-text-primary">
+            No rounds are currently open
+          </h2>
+          <p className="max-w-sm text-sm text-text-secondary">
+            Submissions open once a round is created. Check back soon, or
+            start one yourself.
+          </p>
+          <Link
+            href="/rounds/new"
+            className="rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-accent/40"
+          >
+            Create a round
+          </Link>
+        </motion.div>
       )}
 
       {openRounds.length > 0 && (
@@ -125,7 +143,7 @@ function SubmitForm() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
           onSubmit={handleSubmit}
-          className="mt-12 flex flex-col gap-10"
+          className="mt-12 flex flex-col gap-14"
         >
           <FormSection label="Round">
             <select
@@ -145,22 +163,30 @@ function SubmitForm() {
           <FormSection label="Project name">
             <input
               required
+              maxLength={200}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Cartographer SDK"
               className="rounded-xl border border-border bg-surface px-4 py-3 text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
             />
+            <span className="mt-1 self-end font-mono text-xs text-text-secondary">
+              {name.length}/200
+            </span>
           </FormSection>
 
           <FormSection label="What did you build?">
             <textarea
               required
+              maxLength={4000}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
               placeholder="Describe the project, its purpose, and how it works."
               className="resize-none rounded-xl border border-border bg-surface px-4 py-3 text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
             />
+            <span className="mt-1 self-end font-mono text-xs text-text-secondary">
+              {description.length}/4000
+            </span>
           </FormSection>
 
           <FormSection
@@ -169,12 +195,16 @@ function SubmitForm() {
           >
             <textarea
               required
+              maxLength={3000}
               value={claimedImpact}
               onChange={(e) => setClaimedImpact(e.target.value)}
               rows={4}
               placeholder="e.g. Adopted by 40+ downstream projects, reducing integration time from days to hours."
               className="resize-none rounded-xl border border-border bg-surface px-4 py-3 font-mono text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/40 focus:outline-none"
             />
+            <span className="mt-1 self-end font-mono text-xs text-text-secondary">
+              {claimedImpact.length}/3000
+            </span>
           </FormSection>
 
           <FormSection
@@ -196,7 +226,8 @@ function SubmitForm() {
             <button
               type="button"
               onClick={() => setEvidence((prev) => [...prev, newEvidence()])}
-              className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
+              disabled={evidence.length >= 20}
+              className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
             >
               <Plus className="h-4 w-4" />
               Add evidence link

@@ -128,9 +128,10 @@ function ComputeDistributionAction({
     <div className="rounded-2xl border border-border bg-surface p-7">
       <p className="text-sm text-text-secondary">
         Enter the total pool being distributed, split proportionally across
-        evaluated projects by final score -- irreversible. Payout settlement
-        happens off-chain; use the Rankings page to mark each entitlement
-        paid once settled.
+        evaluated projects by final score -- irreversible. GEN settlement is
+        currently handled off-chain by you, the round admin, due to a known
+        GenLayer Bradbury limitation on contract-initiated transfers; use the
+        Rankings page to mark each entitlement paid once sent.
       </p>
       <div className="mt-5 flex items-center gap-3">
         <input

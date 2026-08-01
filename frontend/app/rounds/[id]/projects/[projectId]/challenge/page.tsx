@@ -35,6 +35,7 @@ export default function ChallengePage({
 
   const [evidence, setEvidence] = useState<DraftEvidenceLink[]>([newEvidence()]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function updateEvidence(index: number, item: DraftEvidenceLink) {
@@ -55,19 +56,25 @@ export default function ChallengePage({
     }
 
     setSubmitting(true);
+    setSubmitStatus(null);
     try {
       const evidencePayload = evidence.map(({ label, url }) => ({ label, url }));
 
-      await writeContract(address, provider, "challenge_evaluation", [
-        projectId,
-        JSON.stringify(evidencePayload),
-      ]);
+      await writeContract(
+        address,
+        provider,
+        "challenge_evaluation",
+        [projectId, JSON.stringify(evidencePayload)],
+        BigInt(0),
+        setSubmitStatus,
+      );
 
       router.push(`/rounds/${id}/projects/${projectId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit challenge");
     } finally {
       setSubmitting(false);
+      setSubmitStatus(null);
     }
   }
 
@@ -140,7 +147,7 @@ export default function ChallengePage({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
         onSubmit={handleSubmit}
-        className="mt-10 flex flex-col gap-10"
+        className="mt-10 flex flex-col gap-14"
       >
         <FormSection
           label="New evidence"
@@ -161,7 +168,8 @@ export default function ChallengePage({
           <button
             type="button"
             onClick={() => setEvidence((prev) => [...prev, newEvidence()])}
-            className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary"
+            disabled={evidence.length >= 20}
+            className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors duration-300 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
           >
             <Plus className="h-4 w-4" />
             Add evidence link
@@ -176,7 +184,7 @@ export default function ChallengePage({
             disabled={submitting}
             className="rounded-full bg-danger px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {submitting ? "Re-evaluating..." : "Submit Challenge"}
+            {submitting ? submitStatus ?? "Re-evaluating..." : "Submit Challenge"}
           </button>
           <button
             type="button"

@@ -35,6 +35,10 @@ export function isRoundAdmin(round: Round, address: string | null): boolean {
 export type EvidenceLink = {
   label: string;
   url: string;
+  // The address that submitted this evidence item. Present on every item
+  // stored by the contract (original submission or a later challenge), so a
+  // challenger's evidence is never indistinguishable from the submitter's.
+  submitted_by?: string;
 };
 
 export type Project = {
@@ -78,6 +82,9 @@ export type Evaluation = {
   reasoning: string;
   cited_evidence: string[];
   challenged: boolean;
+  // The address that triggered the challenge that produced this evaluation
+  // (empty string if this is the original, unchallenged evaluation).
+  challenged_by: string;
 };
 
 // Client-only shape used while a dimension/evidence row is being edited in a

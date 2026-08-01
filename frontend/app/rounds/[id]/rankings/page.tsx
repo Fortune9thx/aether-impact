@@ -126,7 +126,21 @@ export default function RankingsPage({
         !evaluationsLoading &&
         ranked.length === 0 &&
         pending.length === 0 && (
-          <p className="mt-14 text-text-secondary">No submissions yet.</p>
+          <div className="flex flex-col items-center gap-5 py-24 text-center">
+            <h2 className="font-serif text-2xl text-text-primary">
+              Nothing submitted yet
+            </h2>
+            <p className="max-w-sm text-sm text-text-secondary">
+              Once a project is submitted to this round, it will appear here
+              once evaluated.
+            </p>
+            <Link
+              href={`/submit?round=${round.id}`}
+              className="rounded-full border border-border px-5 py-2.5 text-sm text-text-primary transition-colors duration-450 hover:border-accent/40"
+            >
+              Submit a project
+            </Link>
+          </div>
         )}
 
       {!evaluationsLoading && ranked.length > 0 && (
@@ -150,9 +164,11 @@ export default function RankingsPage({
             Distribution
           </h2>
           <p className="mt-2 text-sm text-text-secondary">
-            The funding pool has been split proportionally by final score.
-            Payout settlement is handled off-chain by the round
-            admin, who marks each entitlement as paid once settled.
+            The funding pool has been split proportionally by final score,
+            and each entitlement is recorded on-chain. Actual GEN settlement
+            is currently handled off-chain by the round admin, who marks an
+            entitlement paid once sent, due to a known GenLayer Bradbury
+            limitation on contract-initiated transfers.
           </p>
           <div className="mt-4 flex flex-col gap-3">
             {payouts

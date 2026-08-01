@@ -41,12 +41,45 @@ type EIP6963ProviderDetail = {
 
 type EIP6963AnnounceEvent = CustomEvent<EIP6963ProviderDetail>;
 
-const CONNECT_NETWORK_NAME: Record<string, string> = {
-  localnet: "localnet",
-  studionet: "studionet",
-  "testnet-asimov": "testnetAsimov",
-  "testnet-bradbury": "testnetBradbury",
-};
+// genlayer-js's own client.connect() hardcodes window.ethereum and installs
+// a MetaMask-only Snap -- it fails for every other wallet (OKX, Rabby, etc.)
+// with "MetaMask is not installed.", even when a perfectly valid non-MetaMask
+// provider was passed in. Verified directly: the actual read/write path
+// (_sendTransaction) only ever uses standard eth_sendTransaction/eth_call
+// through the provider we already have; the Snap is not required for it.
+// So we do the standard EIP-3085/3326 chain add+switch ourselves, against
+// whichever provider the user actually connected, instead of calling
+// client.connect() at all.
+async function ensureChain(provider: EthereumProvider) {
+  const chainIdHex = `0x${activeChain.id.toString(16)}`;
+  const currentChainId = (await provider.request({ method: "eth_chainId" })) as string;
+  if (currentChainId === chainIdHex) return;
+
+  const chainParams = {
+    chainId: chainIdHex,
+    chainName: activeChain.name,
+    rpcUrls: activeChain.rpcUrls.default.http,
+    nativeCurrency: activeChain.nativeCurrency,
+    blockExplorerUrls: activeChain.blockExplorers?.default
+      ? [activeChain.blockExplorers.default.url]
+      : undefined,
+  };
+
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: chainIdHex }],
+    });
+  } catch (switchError) {
+    // 4902: chain not added to this wallet yet.
+    const code = (switchError as { code?: number })?.code;
+    if (code !== 4902) throw switchError;
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [chainParams],
+    });
+  }
+}
 
 type WalletContextValue = {
   address: `0x${string}` | null;
@@ -124,18 +157,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         throw new Error("No account returned by wallet");
       }
 
-      const genlayerNetwork =
-        CONNECT_NETWORK_NAME[
-          process.env.NEXT_PUBLIC_GENLAYER_NETWORK ?? "testnet-bradbury"
-        ] ?? "testnetBradbury";
-
-      const { createClient } = await import("genlayer-js");
-      const client = createClient({
-        chain: activeChain,
-        account,
-        provider: provider as never,
-      });
-      await client.connect(genlayerNetwork as never);
+      await ensureChain(provider);
 
       setProvider(provider);
       setAddress(account);
