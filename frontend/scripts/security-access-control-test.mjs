@@ -58,14 +58,36 @@ async function waitDone(client, hash) {
   return receipt;
 }
 
+// Bradbury network congestion (RPC backpressure, node timeouts) throws at
+// the same layer a genuine access-control revert would -- without checking
+// the message, a congested network looks identical to a passing test. Only
+// treat a thrown error as a genuine rejection if it names an actual
+// contract-level revert, never a transport/node-availability failure.
+const NETWORK_ERROR_PATTERNS = [
+  "pipeline backpressure",
+  "not currently accepting transactions",
+  "econnrefused",
+  "etimedout",
+  "fetch failed",
+  "timeout",
+];
+
 async function expectRejected(fn, name) {
   try {
     const hash = await fn();
     const receipt = await waitDone(ownerClient, hash);
     const failed = receipt.txExecutionResultName === "FINISHED_WITH_ERROR";
     record(name, failed, failed ? "" : "call was NOT rejected -- access control gap");
-  } catch {
-    // A synchronous throw (e.g. RPC-level revert) also counts as rejected.
+  } catch (err) {
+    const message = (err?.message ?? String(err)).toLowerCase();
+    const isNetworkError = NETWORK_ERROR_PATTERNS.some((p) => message.includes(p));
+    if (isNetworkError) {
+      throw new Error(
+        `${name}: inconclusive -- Bradbury network congestion prevented submitting the transaction at all (${message}). Retry once the network recovers; this is not a pass or a fail.`,
+      );
+    }
+    // A genuine RPC-level revert (not a network/availability failure) also
+    // counts as rejected.
     record(name, true, "rejected at RPC layer");
   }
 }
