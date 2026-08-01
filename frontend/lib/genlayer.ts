@@ -213,10 +213,45 @@ export async function writeContract(
 
     stopWatching = watchForAppeal(client, hash, onStatus);
 
-    const receipt = await client.waitForTransactionReceipt({
-      hash,
-      status: TransactionStatus.ACCEPTED,
-    });
+    let receipt: Awaited<ReturnType<typeof client.waitForTransactionReceipt>>;
+    try {
+      receipt = await client.waitForTransactionReceipt({
+        hash,
+        status: TransactionStatus.ACCEPTED,
+      });
+    } catch (waitErr) {
+      // waitForTransactionReceipt gives up after its own fixed retry budget
+      // and throws a timeout -- but the transaction can still be sitting in
+      // a slow consensus rotation and succeed moments later. Confirmed
+      // directly: a transaction reported as "timed out" by this call was
+      // ACCEPTED/FINISHED_WITH_RETURN on-chain seconds after the UI showed
+      // a failure. Before giving up, poll the real status ourselves for a
+      // while longer rather than report a false failure on a write that may
+      // still land.
+      const message = waitErr instanceof Error ? waitErr.message : String(waitErr);
+      if (!message.toLowerCase().includes("timed out")) throw waitErr;
+
+      const DECIDED_STATUSES = new Set([
+        "ACCEPTED",
+        "FINALIZED",
+        "UNDETERMINED",
+        "CANCELED",
+        "VALIDATORS_TIMEOUT",
+        "LEADER_TIMEOUT",
+      ]);
+      let confirmed: Record<string, unknown> | null = null;
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const tx = (await client.getTransaction({ hash: hash as never })) as Record<string, unknown>;
+        const statusName = (tx.status_name ?? tx.statusName) as string | undefined;
+        if (statusName && DECIDED_STATUSES.has(statusName)) {
+          confirmed = tx;
+          break;
+        }
+      }
+      if (!confirmed) throw waitErr;
+      receipt = confirmed as never;
+    }
 
     // waitForTransactionReceipt resolves on ANY "decided" terminal state --
     // ACCEPTED, but also UNDETERMINED / LEADER_TIMEOUT / VALIDATORS_TIMEOUT /
