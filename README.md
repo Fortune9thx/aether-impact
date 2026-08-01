@@ -27,8 +27,6 @@ A round is created with natural language evaluation criteria and weighted dimens
 aether-impact/
 ├── contracts/
 │   └── ImpactEvaluator.py     # Round/project/evaluation/challenge logic
-├── prompts/
-│   └── evaluation-prompt.md   # Evaluation prompt design notes
 ├── docs/
 │   ├── DEPLOYMENT.md          # Live contract + frontend deployment info
 │   └── ARCHITECTURE.md        # How the pieces fit together
