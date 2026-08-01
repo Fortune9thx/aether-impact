@@ -16,7 +16,7 @@ A round is created with natural language evaluation criteria and weighted dimens
 | Layer | Technologies |
 |---|---|
 | Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS v4, Framer Motion |
-| Web3 | `genlayer-js`, `viem`, MetaMask wallet connect |
+| Web3 | `genlayer-js`, `viem`, EIP-6963 multi-wallet connect (MetaMask, OKX Wallet, Rabby, and others) |
 | Contracts | GenLayer Intelligent Contracts (Python), GenVM Equivalence Principle for LLM consensus |
 | Network | GenLayer Bradbury testnet |
 | Hosting | Vercel |
@@ -34,7 +34,7 @@ aether-impact/
 │   ├── app/                   # Next.js routes
 │   ├── components/            # UI, round, evaluation, motion components
 │   ├── lib/                   # genlayer-js client, types, hooks
-│   └── scripts/               # deploy.mjs, smoke.mjs
+│   └── scripts/               # deploy, smoke, lifecycle, and security tests
 └── README.md
 ```
 

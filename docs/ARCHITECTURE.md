@@ -5,7 +5,7 @@
 Aether Impact has no backend and no database. The Next.js frontend reads and writes directly to a single GenLayer Intelligent Contract, `ImpactEvaluator.py`. All state (rounds, submissions, evaluations, challenges) lives on-chain.
 
 ```
-Browser (MetaMask)
+Browser (any EIP-6963 wallet)
    │
    ▼
 Next.js frontend  ──genlayer-js──▶  ImpactEvaluator (GenLayer Bradbury)
@@ -50,6 +50,6 @@ Given all application-level variables are ruled out, this is very likely a Bradb
 
 - `lib/genlayer.ts`: chain config and typed `readContract`/`writeContract` wrappers.
 - `lib/use-contract-read.ts`: a small hook wrapping reads with loading/error state.
-- `components/providers/WalletProvider.tsx`: MetaMask connect via `genlayer-js`'s `client.connect()`.
+- `components/providers/WalletProvider.tsx`: EIP-6963 multi-wallet discovery (MetaMask, OKX Wallet, Rabby, and others), connecting via the actual selected wallet's provider rather than `genlayer-js`'s MetaMask-only `client.connect()`, which is not used.
 - Every write-gated page (`/rounds/new`, `/submit`, the evaluation trigger, `/challenge`) shows a real pending state while the transaction is in flight, since LLM-consensus writes are not instant.
 - No mock data anywhere. If `NEXT_PUBLIC_CONTRACT_ADDRESS` isn't set, the app shows an explicit "not configured" state rather than fabricating content.
