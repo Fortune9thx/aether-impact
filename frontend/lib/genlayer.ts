@@ -239,14 +239,28 @@ export async function writeContract(
         "VALIDATORS_TIMEOUT",
         "LEADER_TIMEOUT",
       ]);
+      // Confirmed by direct on-chain check twice during testing: transactions
+      // reported as "timed out" landed successfully several minutes later.
+      // A short fallback budget (2 min) wasn't enough on a congested network
+      // -- give this substantially more room (up to ~10 min) and narrate
+      // progress so the UI doesn't look frozen during a real, long wait.
+      onStatus?.("Still waiting on the network...");
       let confirmed: Record<string, unknown> | null = null;
-      for (let i = 0; i < 40; i++) {
+      for (let i = 0; i < 200; i++) {
         await new Promise((r) => setTimeout(r, 3000));
-        const tx = (await client.getTransaction({ hash: hash as never })) as Record<string, unknown>;
+        let tx: Record<string, unknown>;
+        try {
+          tx = (await client.getTransaction({ hash: hash as never })) as Record<string, unknown>;
+        } catch {
+          continue; // a single failed poll shouldn't abort the whole wait
+        }
         const statusName = (tx.status_name ?? tx.statusName) as string | undefined;
         if (statusName && DECIDED_STATUSES.has(statusName)) {
           confirmed = tx;
           break;
+        }
+        if (statusName === "APPEAL_REVEALING" || statusName === "APPEAL_COMMITTING") {
+          onStatus?.("Appeal in progress...");
         }
       }
       if (!confirmed) throw waitErr;
