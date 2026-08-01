@@ -35,7 +35,28 @@ function requireContractAddress(): `0x${string}` {
 // exception buried inside a Stderr traceback. Extract just the exception
 // message so the UI never shows a raw stack trace / bytecode dump to a user.
 function cleanContractError(err: unknown): Error {
+  // Always log the full, unflattened error to the console. Messages like
+  // viem's generic "An internal error was received. Details: X" collapse
+  // everything the wallet/RPC actually returned (code, cause, data) into one
+  // opaque string -- the only way to see what's really underneath is the
+  // full object, which only exists in devtools, not in the thrown message.
+  console.error("[Aether Impact] raw contract/transaction error:", err);
+
   const raw = err instanceof Error ? err.message : String(err);
+  const errRecord = err as Record<string, unknown> | null;
+
+  // A bare, structureless "Transaction failed" (or similar) from the wallet
+  // or RPC layer carries a numeric JSON-RPC error code even when its message
+  // has nothing useful. Surface that code plus any cause chain instead of
+  // silently passing the unhelpful text straight through.
+  const rpcCode = (errRecord?.code ?? (errRecord?.cause as Record<string, unknown> | undefined)?.code) as
+    | number
+    | undefined;
+  if (rpcCode !== undefined && raw.length < 120 && !raw.includes("ValueError")) {
+    return new Error(
+      `The transaction could not be completed (RPC error ${rpcCode}: "${raw.replace(/^.*Details:\s*/i, "").replace(/\s*Version:.*$/i, "").trim()}"). This is usually transient network/RPC unreliability -- please retry. Check the browser console for full details.`,
+    );
+  }
 
   for (const marker of ["ValueError: ", "KeyError: ", "TypeError: ", "Exception: "]) {
     const idx = raw.lastIndexOf(marker);
