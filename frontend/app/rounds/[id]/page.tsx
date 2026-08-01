@@ -2,9 +2,11 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { Project, Round } from "@/lib/types";
+import { isRoundAdmin, Project, Round } from "@/lib/types";
 import { useContractRead } from "@/lib/use-contract-read";
+import { useWallet } from "@/components/providers/WalletProvider";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AdminBadge } from "@/components/ui/AdminBadge";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 import { formatGen } from "@/lib/format";
 import { RoundAdminPanel } from "@/components/round/RoundAdminPanel";
@@ -15,6 +17,7 @@ export default function RoundDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { address } = useWallet();
 
   const { data: round, loading: roundLoading, error: roundError, refetch: refetchRound } =
     useContractRead<Round>("get_round", [id], [id]);
@@ -34,7 +37,10 @@ export default function RoundDetailPage({
   return (
     <div className="mx-auto max-w-3xl px-6 py-20">
       <div className="flex items-center justify-between">
-        <StatusBadge status={round.status} />
+        <div className="flex items-center gap-3">
+          <StatusBadge status={round.status} />
+          {isRoundAdmin(round, address) && <AdminBadge />}
+        </div>
         {round.status === "open" && (
           <Link
             href={`/submit?round=${round.id}`}

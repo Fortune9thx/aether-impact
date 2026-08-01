@@ -6,6 +6,7 @@ import { writeContract } from "@/lib/genlayer";
 import { parseGen } from "@/lib/format";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { ErrorState } from "@/components/ui/AsyncState";
+import { PendingStatus } from "@/components/ui/Spinner";
 
 export function RoundAdminPanel({
   round,
@@ -71,7 +72,7 @@ function CloseRoundAction({
           disabled={busy}
           className="rounded-full border border-border bg-surface-elevated px-5 py-2.5 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40 disabled:cursor-wait disabled:opacity-60"
         >
-          {busy ? "Working..." : "Close round to submissions"}
+          {busy ? <PendingStatus text="Closing round..." /> : "Close round to submissions"}
         </button>
       </div>
       {error && (
@@ -148,7 +149,7 @@ function ComputeDistributionAction({
           disabled={busy}
           className="ml-auto rounded-full border border-border bg-surface-elevated px-5 py-2.5 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40 disabled:cursor-wait disabled:opacity-60"
         >
-          {busy ? "Working..." : "Compute distribution"}
+          {busy ? <PendingStatus text="Computing distribution..." /> : "Compute distribution"}
         </button>
       </div>
       {error && (
@@ -241,7 +242,7 @@ function AdminManagement({
           disabled={busy === "add" || !newAdmin.trim()}
           className="shrink-0 rounded-full border border-border bg-surface-elevated px-4 py-2.5 text-sm text-text-primary transition-colors duration-300 hover:border-accent/40 disabled:cursor-wait disabled:opacity-60"
         >
-          {busy === "add" ? "Adding..." : "Add Admin"}
+          {busy === "add" ? <PendingStatus text="Adding..." /> : "Add Admin"}
         </button>
       </div>
 

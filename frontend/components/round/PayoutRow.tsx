@@ -7,6 +7,7 @@ import { formatGen } from "@/lib/format";
 import { writeContract } from "@/lib/genlayer";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { ErrorState } from "@/components/ui/AsyncState";
+import { PendingStatus } from "@/components/ui/Spinner";
 
 export function PayoutRow({
   payout,
@@ -72,7 +73,7 @@ export function PayoutRow({
             title="Marks this entitlement as settled after paying the submitter off-chain."
             className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
           >
-            {marking ? "Marking..." : "Mark Paid"}
+            {marking ? <PendingStatus text="Marking..." /> : "Mark Paid"}
           </button>
         ) : (
           <span className="text-xs text-text-secondary">Awaiting payout</span>

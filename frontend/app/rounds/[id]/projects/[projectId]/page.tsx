@@ -2,7 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Sparkles } from "lucide-react";
 import { Evaluation, isRoundAdmin, Project, Round } from "@/lib/types";
 import { isContractConfigured, readContract, writeContract } from "@/lib/genlayer";
 import { useWallet } from "@/components/providers/WalletProvider";
@@ -14,6 +15,8 @@ import { SubmittedEvidenceList } from "@/components/evaluation/SubmittedEvidence
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
 import { WalletButton } from "@/components/ui/WalletButton";
 import { CopyLinkButton } from "@/components/ui/CopyLinkButton";
+import { AdminBadge } from "@/components/ui/AdminBadge";
+import { PendingStatus } from "@/components/ui/Spinner";
 import { formatGen, formatDate } from "@/lib/format";
 
 export default function EvaluationPage({
@@ -37,6 +40,7 @@ export default function EvaluationPage({
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<string | null>(null);
+  const [justCompleted, setJustCompleted] = useState(false);
 
   const fetchEvaluation = useCallback(async () => {
     if (!isContractConfigured()) {
@@ -76,7 +80,7 @@ export default function EvaluationPage({
     }
 
     setRunning(true);
-    setRunStatus(null);
+    setRunStatus("Evaluating project...");
     try {
       await writeContract(
         address,
@@ -87,10 +91,19 @@ export default function EvaluationPage({
         setRunStatus,
       );
       await fetchEvaluation();
+      setJustCompleted(true);
+      setTimeout(() => setJustCompleted(false), 2200);
     } catch (err) {
-      setRunError(
-        err instanceof Error ? err.message : "Evaluation failed to run",
-      );
+      const message = err instanceof Error ? err.message : "Evaluation failed to run";
+      // The contract already has an evaluation for this project -- that's
+      // not a failure from the user's perspective, it's the outcome they
+      // wanted (a score exists). Load it instead of showing a red error for
+      // something that actually succeeded.
+      if (message.toLowerCase().includes("already evaluated")) {
+        await fetchEvaluation();
+      } else {
+        setRunError(message);
+      }
     } finally {
       setRunning(false);
       setRunStatus(null);
@@ -124,9 +137,12 @@ export default function EvaluationPage({
 
       {/* Project header */}
       <div className="mt-10">
-        <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">
-          Evaluation
-        </span>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-xs uppercase tracking-[0.2em] text-text-secondary">
+            Evaluation
+          </span>
+          {round && isRoundAdmin(round, address) && <AdminBadge />}
+        </div>
         <h1 className="mt-3 font-serif text-4xl leading-[1.1] text-text-primary sm:text-5xl">
           {project.name}
         </h1>
@@ -134,6 +150,13 @@ export default function EvaluationPage({
           {round.title} &middot; {formatDate(project.submitted_at)} &middot;{" "}
           {round.status === "open" ? "Open" : "Closed"}
         </p>
+        {isRoundAdmin(round, project.submitter) && (
+          <p className="mt-2 text-xs text-text-secondary">
+            Submitted by a round admin. Round admins are allowed to submit
+            projects to their own rounds; scoring is the same for every
+            submission.
+          </p>
+        )}
         <p className="mt-6 max-w-[65ch] text-text-secondary">
           {project.description}
         </p>
@@ -174,10 +197,20 @@ export default function EvaluationPage({
               disabled={running}
               className="rounded-full bg-accent px-6 py-3 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
             >
-              {running
-                ? runStatus ?? "Evaluating (this can take a moment)..."
-                : "Trigger Evaluation"}
+              {running ? (
+                <PendingStatus text={runStatus ?? "Evaluating project..."} />
+              ) : (
+                "Trigger Evaluation"
+              )}
             </button>
+          )}
+
+          {running && (
+            <p className="max-w-xs text-xs text-text-secondary">
+              This runs a real LLM call across GenLayer validators and can
+              take a minute or more, especially under network load. Feel
+              free to wait here.
+            </p>
           )}
 
           {runError && (
@@ -192,6 +225,19 @@ export default function EvaluationPage({
         <div className="mt-8">
           <ErrorState message={runError} />
         </div>
+      )}
+
+      {justCompleted && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="mt-8 flex w-fit items-center gap-2 rounded-full border border-accent/30 bg-accent-muted px-4 py-2 text-sm text-accent"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Evaluation complete
+        </motion.div>
       )}
 
       {!evaluationLoading && evaluation && (
@@ -293,7 +339,7 @@ export default function EvaluationPage({
                   disabled={claiming}
                   className="shrink-0 rounded-full bg-accent px-5 py-2.5 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
                 >
-                  {claiming ? "Marking..." : "Mark Paid"}
+                  {claiming ? <PendingStatus text="Marking..." /> : "Mark Paid"}
                 </button>
               ) : (
                 <span className="text-sm text-text-secondary">

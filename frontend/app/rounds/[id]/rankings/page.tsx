@@ -3,13 +3,15 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { Evaluation, Payout, Project, Round } from "@/lib/types";
+import { Evaluation, isRoundAdmin, Payout, Project, Round } from "@/lib/types";
 import { isContractConfigured, readContract, writeContract } from "@/lib/genlayer";
 import { useContractRead } from "@/lib/use-contract-read";
 import { useWallet } from "@/components/providers/WalletProvider";
 import { RankingRow } from "@/components/round/RankingRow";
 import { PayoutRow } from "@/components/round/PayoutRow";
 import { LoadingState, ErrorState } from "@/components/ui/AsyncState";
+import { AdminBadge } from "@/components/ui/AdminBadge";
+import { PendingStatus } from "@/components/ui/Spinner";
 
 export default function RankingsPage({
   params,
@@ -30,6 +32,7 @@ export default function RankingsPage({
   const [evaluationsLoading, setEvaluationsLoading] = useState(true);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [runStatus, setRunStatus] = useState<string | null>(null);
 
   const fetchEvaluations = useCallback(async () => {
     if (!projects || !isContractConfigured()) {
@@ -70,15 +73,29 @@ export default function RankingsPage({
     }
 
     setRunningId(projectId);
+    setRunStatus("Evaluating project...");
     try {
-      await writeContract(address, provider, "evaluate_project", [
-        projectId,
-      ]);
+      await writeContract(
+        address,
+        provider,
+        "evaluate_project",
+        [projectId],
+        BigInt(0),
+        setRunStatus,
+      );
       await fetchEvaluations();
     } catch (err) {
-      setRunError(err instanceof Error ? err.message : "Evaluation failed to run");
+      const message = err instanceof Error ? err.message : "Evaluation failed to run";
+      // Already having an evaluation is the desired outcome, not a failure --
+      // just reload it instead of showing a red error for a success.
+      if (message.toLowerCase().includes("already evaluated")) {
+        await fetchEvaluations();
+      } else {
+        setRunError(message);
+      }
     } finally {
       setRunningId(null);
+      setRunStatus(null);
     }
   }
 
@@ -108,7 +125,10 @@ export default function RankingsPage({
         {round.title}
       </Link>
 
-      <h1 className="mt-6 font-serif text-4xl text-text-primary">Rankings</h1>
+      <div className="mt-6 flex items-center justify-between gap-4">
+        <h1 className="font-serif text-4xl text-text-primary">Rankings</h1>
+        {isRoundAdmin(round, address) && <AdminBadge />}
+      </div>
       <p className="mt-3 max-w-xl text-text-secondary">
         Evaluated submissions for this round, ranked by overall score.
       </p>
@@ -219,7 +239,11 @@ export default function RankingsPage({
                     disabled={runningId === project.id}
                     className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-medium text-background transition-opacity duration-450 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
                   >
-                    {runningId === project.id ? "Evaluating..." : "Run Evaluation"}
+                    {runningId === project.id ? (
+                      <PendingStatus text={runStatus ?? "Evaluating..."} />
+                    ) : (
+                      "Run Evaluation"
+                    )}
                   </button>
                 )}
               </div>

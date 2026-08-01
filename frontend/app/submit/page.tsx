@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { DraftEvidenceLink, Round } from "@/lib/types";
+import { DraftEvidenceLink, isRoundAdmin, Round } from "@/lib/types";
 import { writeContract } from "@/lib/genlayer";
 import { useContractRead } from "@/lib/use-contract-read";
 import { useWallet } from "@/components/providers/WalletProvider";
@@ -31,6 +31,7 @@ function SubmitForm() {
 
   const [selectedRoundId, setSelectedRoundId] = useState(searchParams.get("round") ?? "");
   const roundId = selectedRoundId || openRounds[0]?.id || "";
+  const selectedRound = openRounds.find((r) => r.id === roundId) ?? null;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [claimedImpact, setClaimedImpact] = useState("");
@@ -158,6 +159,13 @@ function SubmitForm() {
                 </option>
               ))}
             </select>
+            {selectedRound && isRoundAdmin(selectedRound, address) && (
+              <p className="text-xs text-accent">
+                You are an admin of this round. Submissions from round admins
+                are allowed and scored the same as any other submission --
+                this is shown for transparency, not as a warning.
+              </p>
+            )}
           </FormSection>
 
           <FormSection label="Project name">
