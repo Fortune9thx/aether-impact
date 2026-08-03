@@ -73,18 +73,39 @@ export type DimensionScore = {
   reasoning: string;
 };
 
-export type Evaluation = {
-  id: string;
-  project_id: string;
+// A snapshot of a superseded evaluation, kept when a challenge re-evaluates.
+export type EvaluationHistoryEntry = {
+  version: number;
   overall_score: number;
   confidence: number;
   dimension_scores: DimensionScore[];
   reasoning: string;
   cited_evidence: string[];
   challenged: boolean;
+  challenged_by: string;
+};
+
+export type Evaluation = {
+  id: string;
+  project_id: string;
+  // Increments each time the evaluation is re-run via a challenge; 1 for the
+  // original. Older contracts may not include it.
+  version?: number;
+  overall_score: number;
+  confidence: number;
+  dimension_scores: DimensionScore[];
+  reasoning: string;
+  // Bound server-side to the project's actual submitted evidence URLs -- the
+  // contract only accepts index citations from the model, never free text.
+  cited_evidence: string[];
+  challenged: boolean;
   // The address that triggered the challenge that produced this evaluation
   // (empty string if this is the original, unchallenged evaluation).
   challenged_by: string;
+  // Total challenges consumed (the contract caps these per project).
+  challenge_count?: number;
+  // Prior evaluation snapshots, oldest first, bounded by the challenge cap.
+  history?: EvaluationHistoryEntry[];
 };
 
 // Client-only shape used while a dimension/evidence row is being edited in a

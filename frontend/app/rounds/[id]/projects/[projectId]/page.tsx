@@ -171,6 +171,11 @@ export default function EvaluationPage({
               by {evaluation.challenged_by.slice(0, 6)}...{evaluation.challenged_by.slice(-4)}
             </span>
           )}
+          {evaluation.version !== undefined && evaluation.version > 1 && (
+            <span className="font-mono text-xs text-danger/80">
+              &middot; v{evaluation.version}
+            </span>
+          )}
         </div>
       )}
 
@@ -296,6 +301,43 @@ export default function EvaluationPage({
               <SubmittedEvidenceList evidence={project.evidence} submitter={project.submitter} />
             </div>
           </div>
+
+          {evaluation.history && evaluation.history.length > 0 && (
+            <div className="mt-16">
+              <h2 className="font-serif text-xl text-text-primary">
+                Evaluation History
+              </h2>
+              <p className="mt-1 text-xs text-text-secondary">
+                Prior evaluations superseded by challenges, kept on-chain for
+                transparency. Challenges are capped per project.
+              </p>
+              <div className="mt-5 flex flex-col gap-2">
+                {evaluation.history.map((entry) => (
+                  <div
+                    key={entry.version}
+                    className="flex items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-3.5"
+                  >
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="font-mono text-xs text-text-secondary">
+                        v{entry.version}
+                      </span>
+                      <span className="text-text-secondary">
+                        {entry.challenged && entry.challenged_by
+                          ? `challenged by ${entry.challenged_by.slice(0, 6)}...${entry.challenged_by.slice(-4)}`
+                          : "original evaluation"}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-baseline gap-4 font-mono text-sm">
+                      <span className="text-text-secondary">
+                        conf {entry.confidence}%
+                      </span>
+                      <span className="text-text-primary">{entry.overall_score}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {round.distributed && Number(project.payout) > 0 && (
             <div className="mt-16 flex items-center justify-between gap-4 rounded-2xl border border-border bg-surface p-7">

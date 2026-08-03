@@ -131,7 +131,21 @@ export default function ChallengePage({
             {evaluation.confidence}/100
           </span>
         </div>
+        {evaluation.challenge_count !== undefined && (
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <span className="text-text-secondary">Challenges used</span>
+            <span className="font-mono text-text-primary">
+              {evaluation.challenge_count}/3
+            </span>
+          </div>
+        )}
       </div>
+
+      {evaluation.challenge_count !== undefined && evaluation.challenge_count >= 3 && (
+        <div className="mt-6">
+          <ErrorState message="This project has reached the maximum number of challenges. The current evaluation is final unless the round admin intervenes." />
+        </div>
+      )}
 
       {!address && (
         <div className="mt-8 flex items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4">

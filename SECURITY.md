@@ -26,9 +26,15 @@ Trust model, access matrix, and known limitations for `ImpactEvaluator.py`, audi
 
 Every state-changing action that should be restricted is gated through `_require_round_admin`, which reads `gl.message.sender_address` fresh on each call and checks it against the round's `creator`/`admins` fields; there is no separate contract-level owner to keep in sync.
 
-## Challenge attribution
+## Challenge attribution, versioning, and limits
 
-`challenge_evaluation` is deliberately permissionless (anyone can submit counter-evidence to force a re-evaluation), matching the transparent-dispute design goal. Because of that, every evidence item now carries a `submitted_by` field (the caller's address) so a challenger's evidence is never indistinguishable from the original submitter's. Each evaluation record also stores `challenged_by`. This was a real gap found during audit: the original implementation merged challenge evidence into a project's `evidence` array with no attribution at all.
+`challenge_evaluation` is deliberately permissionless (anyone can submit counter-evidence to force a re-evaluation), matching the transparent-dispute design goal. The hardening around it, in response to reviewer feedback that "challenges overwrite the prior evaluation and can recur until an administrator freezes the result":
+
+- **Challenge cap:** a project can be challenged at most `MAX_CHALLENGES_PER_PROJECT` (3) times. The evaluation record tracks `challenge_count` and `challenge_evaluation` rejects further attempts past the cap, so results cannot be re-rolled indefinitely.
+- **Versioned history, not silent overwrite:** every re-evaluation increments a `version` field and pushes the prior evaluation (score, confidence, dimension scores, reasoning, citations, challenger) into a bounded `history` list on the same record. The full dispute trail is on-chain and shown in the UI, not destroyed.
+- **Attribution:** every evidence item carries `submitted_by` (the caller's address) so a challenger's evidence is never indistinguishable from the original submitter's; each evaluation stores `challenged_by`.
+- **Freeze on distribution (verified):** `challenge_evaluation` rejects any challenge once the round's `distributed` flag is set, and `compute_distribution` is the only writer of that flag (admin-only, one-shot). After distribution, evaluations are immutable: no write path can modify an evaluation record other than `evaluate_project` (blocked once one exists) and `challenge_evaluation` (blocked post-distribution).
+- **No partial state on failure:** the project's evidence list is only committed after the re-evaluation and its strict schema validation succeed, so a failed challenge cannot leave appended evidence behind with no corresponding evaluation.
 
 ## Prompt injection
 
@@ -42,8 +48,14 @@ Every state-changing action that should be restricted is gated through `_require
 
 ## LLM output handling
 
-- `_extract_json` finds the first `{`...`}` span in the model's raw response; `json.loads` on that span is now wrapped in `try/except`, converting a malformed-JSON model response into a clean `gl.vm.UserError` instead of an uncaught `JSONDecodeError`.
-- `_compute_overall_score` and `_store_evaluation` now clamp every model-provided numeric (`score`, `confidence`) into `[0, 100]` via `_clamp_int` before using it in the weighted-average arithmetic that ultimately feeds proportional fund distribution. Before this audit, an out-of-range or malformed numeric from the model would have propagated directly into the payout math.
+In response to reviewer feedback that "output validation does not require exactly one score for every configured dimension, reject duplicate or unknown labels, or bind cited evidence to submitted URLs":
+
+- **Strict dimension schema (`_validate_dimension_scores`):** the model's output must contain exactly one `dimension_scores` entry per configured dimension, with labels matching exactly. Missing dimensions, duplicate labels, and unrecognized labels each raise a specific `gl.vm.UserError` and abort the call before anything is stored. This directly closes the aggregate-distortion hole: a missing dimension can no longer drop its weight from the weighted-average denominator, and a duplicated one can no longer double-count. Duplicate labels are also rejected at round creation, so label-matching is always unambiguous.
+- **Evidence binding (`_bind_cited_evidence`):** the model cites evidence only by integer index into the numbered evidence list it was shown; the contract resolves those indices back to the actual submitted URLs itself and stores only those. Model-written URLs or labels in `cited_evidence` are never stored, making hallucinated or free-floating citations structurally impossible to persist. Invalid/out-of-range/duplicate indices are dropped.
+- **Deterministic aggregation:** `_compute_overall_score` runs only after strict validation, so the weighted average is always computed over exactly the full configured dimension set (weights totaling 100, enforced at round creation). Given a validated score set, the aggregate is fully deterministic.
+- **Fact grounding (best effort within GenLayer's current primitives):** the prompt now requires the model to visit each evidence URL, quote or closely paraphrase specific content from it in each dimension's reasoning, and explicitly state when an evidence link is inaccessible or does not support the claim, rather than inventing support. The Equivalence Principle criteria was updated to have validators check dimension coverage, index-only citations, and evidence-grounded reasoning. Full independent multi-validator fact verification of retrieved content beyond this is a platform-level capability GenLayer does not currently expose; this is documented as a known boundary rather than claimed as solved.
+- `_extract_json` finds the first `{`...`}` span in the model's raw response; parsing is wrapped so malformed JSON or a non-object response becomes a clean `gl.vm.UserError` instead of an uncaught exception.
+- All model-provided numerics (`score`, `confidence`) are clamped into `[0, 100]` via `_clamp_int` before use.
 - `reasoning`, `cited_evidence`, and per-dimension `reasoning` are all length-capped when stored, so a runaway model response cannot bloat storage.
 - All user-supplied JSON arguments (`dimensions`, `evidence`, `new_evidence`) go through `_safe_json_loads`, which converts a malformed-JSON caller input into a clean `gl.vm.UserError` rather than an uncaught `JSONDecodeError`.
 
