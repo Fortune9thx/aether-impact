@@ -21,6 +21,11 @@ export type Round = {
   distributed: boolean;
   creator: string;
   admins: string[];
+  // Max share any single project may receive, in basis points (4000 = 40%).
+  // Set when distribution is computed; absent on older records.
+  max_share_bps?: number;
+  // Pool remainder that the cap left unassignable (wei string).
+  undistributed?: string;
 };
 
 export function isRoundAdmin(round: Round, address: string | null): boolean {
@@ -73,7 +78,16 @@ export type DimensionScore = {
   reasoning: string;
 };
 
-// A snapshot of a superseded evaluation, kept when a challenge re-evaluates.
+// A grounding note the model recorded per evidence item, bound server-side
+// to the actual submitted evidence by index.
+export type EvidenceNote = {
+  index: number;
+  url: string;
+  note: string;
+};
+
+// A snapshot of a superseded evaluation, kept when a challenge re-evaluates
+// or when an admin restores a prior version.
 export type EvaluationHistoryEntry = {
   version: number;
   overall_score: number;
@@ -81,6 +95,7 @@ export type EvaluationHistoryEntry = {
   dimension_scores: DimensionScore[];
   reasoning: string;
   cited_evidence: string[];
+  evidence_notes?: EvidenceNote[];
   challenged: boolean;
   challenged_by: string;
 };
@@ -104,7 +119,13 @@ export type Evaluation = {
   challenged_by: string;
   // Total challenges consumed (the contract caps these per project).
   challenge_count?: number;
-  // Prior evaluation snapshots, oldest first, bounded by the challenge cap.
+  // Per-evidence accessibility/grounding notes from the model, index-bound.
+  evidence_notes?: EvidenceNote[];
+  // Set when a round admin restored a prior version: which version was
+  // promoted back to current, and by whom.
+  restored_from?: number;
+  restored_by?: string;
+  // Prior evaluation snapshots, oldest first, bounded on-chain.
   history?: EvaluationHistoryEntry[];
 };
 

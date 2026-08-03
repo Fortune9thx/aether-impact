@@ -93,6 +93,7 @@ function ComputeDistributionAction({
 }) {
   const { address, provider } = useWallet();
   const [pool, setPool] = useState("0.1");
+  const [maxShare, setMaxShare] = useState("40");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,11 +110,18 @@ function ComputeDistributionAction({
       return;
     }
 
+    const maxSharePct = Number(maxShare);
+    if (!Number.isInteger(maxSharePct) || maxSharePct < 1 || maxSharePct > 100) {
+      setError("Max share must be a whole number between 1 and 100.");
+      return;
+    }
+
     setBusy(true);
     try {
       await writeContract(address, provider, "compute_distribution", [
         round.id,
         poolWei.toString(),
+        String(maxSharePct * 100), // percent -> basis points
       ]);
       onChanged();
     } catch (err) {
@@ -129,12 +137,14 @@ function ComputeDistributionAction({
     <div className="rounded-2xl border border-border bg-surface p-7">
       <p className="text-sm text-text-secondary">
         Enter the total pool being distributed, split proportionally across
-        evaluated projects by final score -- irreversible. GEN settlement is
+        evaluated projects by final score -- irreversible. The max share cap
+        limits how much of the pool any single project can take; freed
+        amounts are redistributed among the others. GEN settlement is
         currently handled off-chain by you, the round admin, due to a known
         GenLayer Bradbury limitation on contract-initiated transfers; use the
         Rankings page to mark each entitlement paid once sent.
       </p>
-      <div className="mt-5 flex items-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-3">
         <input
           type="number"
           min="0"
@@ -144,6 +154,18 @@ function ComputeDistributionAction({
           className="w-32 rounded-xl border border-border bg-surface-elevated px-4 py-2.5 font-mono text-sm text-text-primary focus:border-accent/40 focus:outline-none"
         />
         <span className="text-sm text-text-secondary">GEN</span>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            max="100"
+            step="1"
+            value={maxShare}
+            onChange={(e) => setMaxShare(e.target.value)}
+            className="w-20 rounded-xl border border-border bg-surface-elevated px-4 py-2.5 font-mono text-sm text-text-primary focus:border-accent/40 focus:outline-none"
+          />
+          <span className="text-sm text-text-secondary">% max share</span>
+        </div>
         <button
           onClick={handleRun}
           disabled={busy}

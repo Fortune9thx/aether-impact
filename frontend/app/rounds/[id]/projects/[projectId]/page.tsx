@@ -41,6 +41,9 @@ export default function EvaluationPage({
   const [runError, setRunError] = useState<string | null>(null);
   const [runStatus, setRunStatus] = useState<string | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
+  const [confirmingVersion, setConfirmingVersion] = useState<number | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const fetchEvaluation = useCallback(async () => {
     if (!isContractConfigured()) {
@@ -110,6 +113,26 @@ export default function EvaluationPage({
     }
   }
 
+  async function handleRestore(version: number) {
+    setRestoreError(null);
+    if (!address) return;
+    setRestoringVersion(version);
+    try {
+      await writeContract(address, provider, "restore_evaluation", [
+        projectId,
+        String(version),
+      ]);
+      await fetchEvaluation();
+    } catch (err) {
+      setRestoreError(
+        err instanceof Error ? err.message : "Failed to restore evaluation",
+      );
+    } finally {
+      setRestoringVersion(null);
+      setConfirmingVersion(null);
+    }
+  }
+
   if (roundLoading || projectLoading) return <LoadingState label="Loading project..." />;
 
   const loadError = roundError || projectError;
@@ -174,6 +197,18 @@ export default function EvaluationPage({
           {evaluation.version !== undefined && evaluation.version > 1 && (
             <span className="font-mono text-xs text-danger/80">
               &middot; v{evaluation.version}
+            </span>
+          )}
+        </div>
+      )}
+
+      {evaluation?.restored_from !== undefined && (
+        <div className="mt-4 flex w-fit items-center gap-2 rounded-full border border-accent/30 bg-accent-muted px-4 py-2 text-sm text-accent">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Restored from v{evaluation.restored_from} by round admin
+          {evaluation.restored_by && (
+            <span className="font-mono text-xs text-accent/80">
+              {evaluation.restored_by.slice(0, 6)}...{evaluation.restored_by.slice(-4)}
             </span>
           )}
         </div>
@@ -286,6 +321,30 @@ export default function EvaluationPage({
             <div className="mt-5">
               <CitedEvidenceList urls={evaluation.cited_evidence} />
             </div>
+            {evaluation.evidence_notes && evaluation.evidence_notes.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-xs uppercase tracking-[0.15em] text-text-secondary">
+                  Grounding Notes
+                </h3>
+                <p className="mt-1 text-xs text-text-secondary">
+                  What the Intelligent Contract reported finding (or failing to
+                  reach) at each evidence link, bound to the submitted URLs.
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {evaluation.evidence_notes.map((note) => (
+                    <div
+                      key={note.index}
+                      className="rounded-xl border border-border bg-surface px-4 py-3"
+                    >
+                      <span className="font-mono text-xs text-text-secondary">
+                        [{note.index}] {note.url}
+                      </span>
+                      <p className="mt-1 text-sm text-text-secondary">{note.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Full submitted evidence, with attribution */}
@@ -308,8 +367,11 @@ export default function EvaluationPage({
                 Evaluation History
               </h2>
               <p className="mt-1 text-xs text-text-secondary">
-                Prior evaluations superseded by challenges, kept on-chain for
-                transparency. Challenges are capped per project.
+                Prior evaluations superseded by challenges or restores, kept
+                on-chain for transparency. Challenges are capped per project.
+                {isRoundAdmin(round, address) && !round.distributed && (
+                  <> As a round admin, you can restore a prior version.</>
+                )}
               </p>
               <div className="mt-5 flex flex-col gap-2">
                 {evaluation.history.map((entry) => (
@@ -327,15 +389,54 @@ export default function EvaluationPage({
                           : "original evaluation"}
                       </span>
                     </div>
-                    <div className="flex shrink-0 items-baseline gap-4 font-mono text-sm">
-                      <span className="text-text-secondary">
-                        conf {entry.confidence}%
-                      </span>
-                      <span className="text-text-primary">{entry.overall_score}</span>
+                    <div className="flex shrink-0 items-center gap-4">
+                      <div className="flex items-baseline gap-4 font-mono text-sm">
+                        <span className="text-text-secondary">
+                          conf {entry.confidence}%
+                        </span>
+                        <span className="text-text-primary">{entry.overall_score}</span>
+                      </div>
+                      {isRoundAdmin(round, address) &&
+                        !round.distributed &&
+                        (confirmingVersion === entry.version ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRestore(entry.version)}
+                              disabled={restoringVersion !== null}
+                              className="rounded-full bg-accent px-3.5 py-1.5 text-xs font-medium text-background transition-opacity duration-300 hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+                            >
+                              {restoringVersion === entry.version ? (
+                                <PendingStatus text="Restoring..." />
+                              ) : (
+                                `Confirm restore v${entry.version}`
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setConfirmingVersion(null)}
+                              disabled={restoringVersion !== null}
+                              className="text-xs text-text-secondary transition-colors duration-300 hover:text-text-primary"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingVersion(entry.version)}
+                            disabled={restoringVersion !== null}
+                            className="rounded-full border border-border px-3.5 py-1.5 text-xs text-text-primary transition-colors duration-300 hover:border-accent/40"
+                          >
+                            Restore
+                          </button>
+                        ))}
                     </div>
                   </div>
                 ))}
               </div>
+              {restoreError && (
+                <div className="mt-4">
+                  <ErrorState message={restoreError} />
+                </div>
+              )}
             </div>
           )}
 

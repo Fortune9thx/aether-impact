@@ -10,6 +10,12 @@ from genlayer import *
 # cannot be re-scored forever before a round admin ever gets to distribution.
 MAX_CHALLENGES_PER_PROJECT = 3
 
+# Prior-evaluation snapshots kept on the record (populated by challenges and
+# by admin restores). Bounded so a single evaluation record cannot grow
+# without limit, but large enough to hold the full trail of a maximally
+# challenged and restored project.
+MAX_HISTORY_ENTRIES = 8
+
 
 class ImpactEvaluator(gl.Contract):
     # All collections are TreeMap[str, str] with JSON-encoded values.
@@ -208,7 +214,14 @@ Evidence (cite only by the index number shown; never write out a URL):
 {evidence_lines}
 === UNTRUSTED DATA END ===
 
-Visit and read the actual content at each evidence URL before scoring. Ground every dimension score in specific content you found there: quote or closely paraphrase a concrete fact, line, or statement from the evidence inside that dimension's "reasoning". If an evidence URL's content is inaccessible or does not actually support the claim, say so explicitly in the reasoning rather than guessing or inventing support.
+Visit and read the actual content at each evidence URL before scoring. For EVERY dimension score, your "reasoning" must do all three of the following, in order:
+1. State which evidence indices you actually accessed and whether each loaded successfully (e.g. "[0] accessible, [1] failed to load").
+2. Quote or closely paraphrase a specific, concrete piece of content you found at the accessible evidence (a fact, number, sentence, file name, or feature -- not a generic summary).
+3. Explain how that specific content supports, or fails to support, the score you are giving.
+
+If an evidence URL is inaccessible or its content does not actually support the claim, you MUST say so explicitly and score accordingly. Never invent, assume, or embellish evidence content. A score justified only by vague praise with no concrete reference to retrieved content is invalid.
+
+Also fill "evidence_notes": one short entry per evidence index you attempted, stating accessibility and what the content was, e.g. {{"index": 0, "note": "accessible; GitHub repo with CI badge, 40 releases, TypeScript SDK"}}.
 
 Do not compute an overall score yourself -- the contract derives it deterministically from your per-dimension scores.
 
@@ -218,10 +231,13 @@ Respond with a single JSON object only, matching exactly this shape:
 {{
   "confidence": <int 0-100>,
   "dimension_scores": [
-    {{"label": "<one of the exact dimension labels listed above>", "score": <int 0-100>, "reasoning": "<justification that quotes or references specific evidence content, e.g. 'per [0], ...'>"}}
+    {{"label": "<one of the exact dimension labels listed above>", "score": <int 0-100>, "reasoning": "<the 3-part grounded justification described above, referencing evidence by index like [0]>"}}
   ],
   "reasoning": "<overall reasoning, 2-4 sentences>",
-  "cited_evidence": [<evidence index integers only, e.g. 0, 2 -- never a URL or label>]
+  "cited_evidence": [<evidence index integers only, e.g. 0, 2 -- never a URL or label>],
+  "evidence_notes": [
+    {{"index": <evidence index int>, "note": "<accessibility + short factual description of retrieved content>"}}
+  ]
 }}"""
 
     def _run_evaluation(self, project: dict, round_record: dict, task: str) -> dict:
@@ -246,11 +262,15 @@ Respond with a single JSON object only, matching exactly this shape:
                 "labels given, with no missing, duplicate, or unrecognized labels. "
                 "Dimension scores and confidence must be integers between 0 and 100. "
                 "cited_evidence must contain only integer indices into the numbered "
-                "evidence list, never URLs or labels. Reasoning should be substantively "
-                "grounded in the description and evidence provided, referencing specific "
-                "evidence content rather than generic praise. Minor differences in "
-                "wording or emphasis between validators are acceptable as long as the "
-                "scores, dimension coverage, and overall judgment are reasonably close."
+                "evidence list, never URLs or labels. Each dimension's reasoning must "
+                "contain concrete references to actually retrieved evidence content: a "
+                "quote, close paraphrase, specific fact, or explicit statement that an "
+                "evidence item was inaccessible or unsupportive. Reject reasoning that "
+                "is only vague or generic praise with no concrete reference to evidence "
+                "content. evidence_notes must state per-index accessibility. Minor "
+                "differences in wording or emphasis between validators are acceptable "
+                "as long as the scores, dimension coverage, grounding quality, and "
+                "overall judgment are reasonably close."
             ),
         )
 
@@ -321,6 +341,42 @@ Respond with a single JSON object only, matching exactly this shape:
                 break
         return bound
 
+    def _bind_evidence_notes(self, notes: object, evidence: list) -> list:
+        # Grounding summaries from the model ("[0] accessible; repo shows X").
+        # Same index-binding rule as citations: only indices into the actual
+        # submitted evidence list are kept, and the note text is length-capped.
+        # These are informational (shown in the UI for transparency), not used
+        # in any scoring arithmetic, so malformed entries are dropped rather
+        # than failing the evaluation. Full cryptographic verification of what
+        # the model retrieved from the web is a platform limitation (see
+        # SECURITY.md); these notes plus validator agreement under the
+        # Equivalence Principle are the strongest grounding GenLayer currently
+        # supports.
+        if not isinstance(notes, list):
+            return []
+        bound = []
+        seen_idx = set()
+        for entry in notes:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                idx = int(entry.get("index"))  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                continue
+            if idx < 0 or idx >= len(evidence) or idx in seen_idx:
+                continue
+            seen_idx.add(idx)
+            bound.append(
+                {
+                    "index": idx,
+                    "url": str(evidence[idx]["url"])[:500],
+                    "note": str(entry.get("note", ""))[:500],
+                }
+            )
+            if len(bound) >= 20:
+                break
+        return bound
+
     def _compute_overall_score(self, dimension_scores: list, dimensions: list) -> int:
         # Deterministic and fully data-driven: by the time this runs,
         # _validate_dimension_scores has already guaranteed dimension_scores
@@ -369,6 +425,7 @@ Respond with a single JSON object only, matching exactly this shape:
             for entry in parsed["dimension_scores"]
         ]
         bound_evidence = self._bind_cited_evidence(parsed.get("cited_evidence"), evidence)
+        bound_notes = self._bind_evidence_notes(parsed.get("evidence_notes"), evidence)
 
         # Keep the prior evaluation (if any) in a bounded history list rather
         # than silently overwriting it, and track how many times this
@@ -391,11 +448,12 @@ Respond with a single JSON object only, matching exactly this shape:
                     "dimension_scores": existing.get("dimension_scores"),
                     "reasoning": existing.get("reasoning"),
                     "cited_evidence": existing.get("cited_evidence"),
+                    "evidence_notes": existing.get("evidence_notes", []),
                     "challenged": existing.get("challenged"),
                     "challenged_by": existing.get("challenged_by"),
                 }
             )
-            history = history[-MAX_CHALLENGES_PER_PROJECT:]
+            history = history[-MAX_HISTORY_ENTRIES:]
 
         if challenged:
             challenge_count += 1
@@ -409,6 +467,7 @@ Respond with a single JSON object only, matching exactly this shape:
             "dimension_scores": clamped_dimension_scores,
             "reasoning": str(parsed["reasoning"])[:2000],
             "cited_evidence": bound_evidence,
+            "evidence_notes": bound_notes,
             "challenged": challenged,
             "challenged_by": challenged_by,
             "challenge_count": challenge_count,
@@ -654,6 +713,84 @@ Respond with a single JSON object only, matching exactly this shape:
 
         return evaluation_id
 
+    @gl.public.write
+    def restore_evaluation(self, project_id: str, version_number: str) -> str:
+        # Admin recovery path: a challenge can legitimately replace a good
+        # evaluation with a worse one (the LLM re-scores with the challenger's
+        # evidence added). Since history preserves every superseded version,
+        # a round admin can promote a prior version back to current -- but
+        # only before distribution freezes results, and without deleting any
+        # history: the replaced current evaluation is itself snapshotted, so
+        # the full trail (including the restore) stays auditable on-chain.
+        # challenge_count is deliberately NOT reset: restoring does not
+        # refund challenge attempts.
+        project = self._get_project(project_id)
+        round_record = self._get_round(project["round_id"])
+        self._require_round_admin(round_record)
+
+        if round_record.get("distributed"):
+            raise gl.vm.UserError(
+                "this round has already distributed funds; evaluations are frozen"
+            )
+
+        evaluation_id = f"eval-{project_id}"
+        existing_raw = self.evaluations.get(evaluation_id)
+        if existing_raw is None:
+            raise gl.vm.UserError(f"no evaluation found for project: {project_id}")
+
+        existing = json.loads(existing_raw)
+        try:
+            target_version = int(version_number)
+        except (TypeError, ValueError):
+            raise gl.vm.UserError("version_number must be an integer")
+
+        target = None
+        for entry in existing.get("history", []):
+            if entry.get("version") == target_version:
+                target = entry
+                break
+        if target is None:
+            raise gl.vm.UserError(
+                f"version {target_version} not found in this evaluation's history"
+            )
+
+        history = existing.get("history", [])
+        history.append(
+            {
+                "version": existing.get("version", 1),
+                "overall_score": existing.get("overall_score"),
+                "confidence": existing.get("confidence"),
+                "dimension_scores": existing.get("dimension_scores"),
+                "reasoning": existing.get("reasoning"),
+                "cited_evidence": existing.get("cited_evidence"),
+                "evidence_notes": existing.get("evidence_notes", []),
+                "challenged": existing.get("challenged"),
+                "challenged_by": existing.get("challenged_by"),
+            }
+        )
+        history = history[-MAX_HISTORY_ENTRIES:]
+
+        restorer = str(gl.message.sender_address)
+        record = {
+            "id": evaluation_id,
+            "project_id": project_id,
+            "version": existing.get("version", 1) + 1,
+            "overall_score": target.get("overall_score"),
+            "confidence": target.get("confidence"),
+            "dimension_scores": target.get("dimension_scores"),
+            "reasoning": target.get("reasoning"),
+            "cited_evidence": target.get("cited_evidence"),
+            "evidence_notes": target.get("evidence_notes", []),
+            "challenged": target.get("challenged"),
+            "challenged_by": target.get("challenged_by"),
+            "challenge_count": existing.get("challenge_count", 0),
+            "restored_from": target_version,
+            "restored_by": restorer,
+            "history": history,
+        }
+        self.evaluations[evaluation_id] = json.dumps(record)
+        return evaluation_id
+
     # ---- funding & distribution ----
     #
     # Native on-chain payout is not currently reliable on this network: a
@@ -666,7 +803,16 @@ Respond with a single JSON object only, matching exactly this shape:
     # off-chain payment step using these recorded amounts.
 
     @gl.public.write
-    def compute_distribution(self, round_id: str, pool: str) -> str:
+    def compute_distribution(self, round_id: str, pool: str, max_share_bps: str) -> str:
+        # Distribution safeguard: purely proportional splitting lets one
+        # high-scoring project absorb nearly the whole pool. max_share_bps
+        # caps any single project's share (in basis points; 4000 = 40%, the
+        # frontend's default; 10000 disables the cap). Amounts freed by the
+        # cap are redistributed proportionally among the uncapped projects,
+        # iteratively, until no project exceeds its cap. If capping leaves
+        # part of the pool unassignable (e.g. one project with a 40% cap),
+        # the remainder stays undistributed and is recorded on the round as
+        # "undistributed" rather than silently vanishing.
         record = self._get_round(round_id)
         self._require_round_admin(record)
 
@@ -678,6 +824,15 @@ Respond with a single JSON object only, matching exactly this shape:
         pool_amount = int(pool)
         if pool_amount <= 0:
             raise gl.vm.UserError("pool must be a positive amount")
+
+        try:
+            cap_bps = int(max_share_bps)
+        except (TypeError, ValueError):
+            raise gl.vm.UserError("max_share_bps must be an integer")
+        if cap_bps < 100 or cap_bps > 10000:
+            raise gl.vm.UserError(
+                "max_share_bps must be between 100 (1%) and 10000 (100%, no cap)"
+            )
 
         ids = self._load_ids(self.project_ids, round_id)
         evaluated = []
@@ -694,9 +849,39 @@ Respond with a single JSON object only, matching exactly this shape:
         if total_score <= 0:
             raise gl.vm.UserError("all evaluated projects scored zero; nothing to distribute")
 
+        cap_amount = (pool_amount * cap_bps) // 10000
+
+        # Iterative cap-and-redistribute: assign proportional shares of the
+        # remaining pool among not-yet-capped projects; any share exceeding
+        # the cap is fixed at the cap and its excess re-split among the rest.
+        # Each pass caps at least one project, so this terminates in at most
+        # len(evaluated) passes. Fully deterministic integer arithmetic.
+        final_payout = {}
+        active = [(pid, score) for pid, score in evaluated if score > 0]
+        remaining_pool = pool_amount
+        while active:
+            active_total = sum(score for _, score in active)
+            over_cap = []
+            for pid, score in active:
+                share = (remaining_pool * score) // active_total
+                if share > cap_amount:
+                    over_cap.append(pid)
+            if not over_cap:
+                for pid, score in active:
+                    final_payout[pid] = (remaining_pool * score) // active_total
+                break
+            for pid, score in active:
+                if pid in over_cap:
+                    final_payout[pid] = cap_amount
+                    remaining_pool -= cap_amount
+            active = [(pid, score) for pid, score in active if pid not in over_cap]
+
+        distributed_total = sum(final_payout.values())
+        undistributed = pool_amount - distributed_total
+
         payouts = []
-        for pid, score in evaluated:
-            payout = (pool_amount * score) // total_score
+        for pid, _score in evaluated:
+            payout = final_payout.get(pid, 0)
             project = self._get_project(pid)
             project["payout"] = str(payout)
             project["paid"] = False
@@ -704,6 +889,8 @@ Respond with a single JSON object only, matching exactly this shape:
             payouts.append({"project_id": pid, "payout": str(payout)})
 
         record["pool"] = str(pool_amount)
+        record["max_share_bps"] = cap_bps
+        record["undistributed"] = str(undistributed)
         record["distributed"] = True
         self.rounds[round_id] = json.dumps(record)
 
