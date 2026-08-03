@@ -56,6 +56,17 @@ if (!chain) {
 const account = createAccount(privateKey);
 const client = createClient({ chain, account });
 
+// Known failure mode under Bradbury congestion: the node's eth_estimateGas
+// call fails ("execution reverted" / backpressure), and genlayer-js then
+// falls back to a hardcoded 200k gas limit that is too small for this
+// contract, so the deploy dies with "intrinsic gas too low". The fallback
+// is not interceptable from outside the library (createClient's internal
+// action layers close over intermediate client copies, so patching the
+// returned client's estimateTransactionGas has no effect on the deploy
+// path). The only remedy is retrying until the node answers the
+// estimation call; if you see "Gas estimation failed, using default
+// 200_000" in the output, the attempt will fail -- rerun it.
+
 console.log(`Deployer address: ${account.address}`);
 console.log(`Network: ${networkName} (${chain.name})`);
 
