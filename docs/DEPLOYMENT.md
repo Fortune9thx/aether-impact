@@ -6,12 +6,10 @@
 |---|---|
 | Contract | `ImpactEvaluator` |
 | Network | GenLayer Bradbury testnet |
-| Address | `0x06748948F830F200eF34cC05717c8a7EA8C9f42B` |
-| Deployed | 2026-07-31 |
+| Address | `0x1027296C41628A3670AF66E5f1F1a9Ba1a40689a` |
+| Deployed | 2026-08-02 |
 
 Verified read-only via `frontend/scripts/verify-clean-deploy.mjs` (confirms the contract is reachable and reports zero rounds). Deliberately **not** verified with `smoke.mjs`/`lifecycle-test.mjs` on this address: both write test data (a "Smoke Test Round", a "Lifecycle Test Round") that would show up to real users on the production frontend. The underlying contract logic itself was already verified extensively on prior addresses (see superseded list below) using those scripts before this final clean deploy.
-
-> **Note (2026-08-02):** `contracts/ImpactEvaluator.py` in this repo is currently ahead of the deployed address above. It adds reviewer-requested evaluation hardening (strict per-dimension output schema, index-bound evidence citations, challenge cap + versioned history; see `SECURITY.md`). Redeployment has been blocked by sustained Bradbury RPC congestion ("pipeline backpressure"); redeploy and update this address once the network accepts transactions again. The deployed contract remains fully functional in the meantime; the frontend handles both the old and new evaluation record shapes.
 
 **Superseded addresses:**
 - `0x31aDeF6CB32e0DA12c3Dc3E8e023d8219A44734b`: the first deploy. `evaluate_project` asked the LLM to compute `overall_score` itself; validators rounded the weighted average differently and the Equivalence Principle sometimes failed to reach consensus (`UNDETERMINED`). Fixed by having the contract compute `overall_score` deterministically from the model's per-dimension scores, so the LLM is only asked to judge, never to do the final arithmetic.
@@ -20,6 +18,7 @@ Verified read-only via `frontend/scripts/verify-clean-deploy.mjs` (confirms the 
 - `0x98A161e781A01ace184A472101AB6583AA3bc02f` and several diagnostic-only redeploys: used to isolate the transfer bug (payable-value-crediting, same-tx vs settled-balance forwarding, fresh vs pre-existing recipient address, interface class ordering, header format). All ruled out as the cause; see "Known limitation" below.
 - `0x7b7AFfB3b03d394FbBc13C38e743a0Ac02e62900`: first deploy after the transfer bug was isolated, with the diagnostic-only methods and `_Recipient` interface removed and `compute_distribution`/`mark_paid` in place. Superseded by a full pre-submission security audit (see `SECURITY.md`): all `raise ValueError` calls converted to `raise gl.vm.UserError` to match the confirmed-working reference contract's pattern, LLM prompt inputs sanitized against prompt injection, LLM numeric outputs clamped before use in payout arithmetic, user-supplied JSON parsing wrapped against malformed input, and challenge evidence now attributed to its submitter instead of silently merged into the original submission.
 - `0x56AFBD30eE7fa115aC0286ec666521b624E80fDe`: the audited contract, verified with the full lifecycle and access-control test suites (see `SECURITY.md`). Superseded because those test runs left "Security Test Round" and "Lifecycle Test Round" entries on it, which then showed up to real visitors on the production frontend. Redeployed clean specifically to clear that test data; going forward, `smoke.mjs`/`lifecycle-test.mjs`/`security-access-control-test.mjs` should only be run against a disposable address, never the one wired to production.
+- `0x06748948F830F200eF34cC05717c8a7EA8C9f42B`: the clean pre-submission deploy. Superseded by a deeper review pass (see `SECURITY.md`): the evaluation prompt now requires per-dimension grounding notes (accessibility, quoted content, and why it does or doesn't support the score), the model's citations are bound by index to submitted evidence (`_bind_evidence_notes` in addition to `_bind_cited_evidence`), a round admin can `restore_evaluation` to any prior version from history before distribution, and `compute_distribution` takes a `max_share_bps` cap so one project cannot absorb the whole pool.
 
 **Known limitation, payout transfer (reported upstream):** a GenLayer Intelligent Contract cannot currently pay its own balance out to a plain wallet address via `gl.evm.contract_interface` / `emit_transfer` on Bradbury testnet. This was tested exhaustively: payable vs non-payable, `int` vs `u256`, same-transaction vs settled-balance-in-a-separate-transaction, interface class ordering, header format, and fresh vs pre-existing/active recipient address all made no difference. The contract was confirmed to genuinely hold a real, settled balance (verified via direct before/after on-chain balance checks), and the transfer call is mechanically identical to a pattern confirmed working on another live contract on the same network, yet the transaction reports `ACCEPTED` while no value arrives and the contract's own balance isn't even debited. This points to a Bradbury-side issue with how a contract-initiated native transfer is applied post-consensus, not the contract code. A report with the full repro has been filed with the GenLayer team.
 
@@ -33,7 +32,7 @@ Deployed on Vercel from the `frontend/` directory (Next.js root). Production env
 
 | Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_CONTRACT_ADDRESS` | `0x06748948F830F200eF34cC05717c8a7EA8C9f42B` |
+| `NEXT_PUBLIC_CONTRACT_ADDRESS` | `0x1027296C41628A3670AF66E5f1F1a9Ba1a40689a` |
 | `NEXT_PUBLIC_GENLAYER_NETWORK` | `testnet-bradbury` |
 
 ## Redeploying the contract
